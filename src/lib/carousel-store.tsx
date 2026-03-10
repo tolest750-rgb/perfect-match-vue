@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from "react";
-import type { ProcessedSlide, StyleKey, LightKey, FormatKey, ResKey } from "./parser";
+import type { ProcessedSlide, StyleKey, LightKey, FormatKey, ResKey, LayoutPosition } from "./parser";
 import { parseSlides } from "./parser";
 import { buildPrompt, buildLayout, visualHasPerson, detectTitleStyle } from "./prompts";
 import type { TitleStyle } from "./prompts";
@@ -186,17 +186,25 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
       const isFirstSlide = i === 0;
       const useFaceRef =
         hasFaceRef && visualHasPerson(s.visual ?? "") && (isFirstSlide || !visualMentionsNamedPerson(s.visual ?? ""));
+      const layoutPos: LayoutPosition = "bottom-left";
       return {
         ...s,
         prompt: buildPrompt(s, style, light, fmt, { useFaceRef }),
-        layout: buildLayout(light),
+        layout: {
+          ...buildLayout(light),
+          layoutPos,
+          slideNum: s.num,
+          titulo: s.titulo,
+          subtitulo: s.subtitulo ?? "",
+          cta: s.cta ?? "",
+        },
+        layoutPosition: layoutPos,
         useFaceRef,
         fmt,
         style,
         light,
         res,
         titleStyle: detectTitleStyle(s.visual ?? "", s.design),
-        layoutPosition: s.layoutPosition ?? "bottom",
       };
     });
 
