@@ -122,6 +122,19 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     r.readAsDataURL(file);
   }, []);
 
+  const setLayoutRef = useCallback((file: File) => {
+    const r = new FileReader();
+    r.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      const b64 = dataUrl.split(",")[1];
+      setLayoutRefB64State(b64);
+      layoutRefB64Ref.current = b64;
+      setLayoutRefDataUrl(dataUrl);
+      setLayoutRefName(file.name);
+    };
+    r.readAsDataURL(file);
+  }, []);
+
   const setVarUrl = (slideIdx: number, varIdx: number, url: string) => {
     setVarUrls((prev) => ({ ...prev, [`${slideIdx}_${varIdx}`]: url }));
   };
