@@ -138,7 +138,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
       return {
         ...s,
         prompt: buildPrompt(s, style, light, fmt, layoutPos, {
-          useFaceRef: hasFaceRef && visualMentionsPerson(s.visual ?? ""),
+          useFaceRef: hasFaceRef && visualMentionsPerson(s.visual ?? "") && !visualMentionsNamedPerson(s.visual ?? ""),
         }),
         layout: buildLayout(s, light, fmt, layoutPos),
         layoutPosition: layoutPos,
