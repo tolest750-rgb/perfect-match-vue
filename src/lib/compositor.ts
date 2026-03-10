@@ -136,6 +136,7 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
         doText();
         canvas.toBlob((blob) => resolve(blob!), "image/png", 1.0);
       } else {
+        // Fallback: dark gradient only — do NOT paste the face reference photo
         const GC: Record<string, [string, string]> = {
           dramatic: ["#030318", "#06103a"],
           warm: ["#100500", "#221000"],
@@ -149,28 +150,15 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
         ctx.fillStyle = grd;
         ctx.fillRect(0, 0, CW, CH);
 
-        if (faceB64) {
-          const fi = new Image();
-          fi.onload = () => {
-            const fh = CH * 0.5,
-              fw = fh * (fi.width / fi.height),
-              fx = (CW - fw) / 2;
-            ctx.save();
-            ctx.globalAlpha = 0.45;
-            ctx.drawImage(fi, fx, 0, fw, fh);
-            ctx.restore();
-            doText();
-            canvas.toBlob((blob) => resolve(blob!), "image/png", 1.0);
-          };
-          fi.onerror = () => {
-            doText();
-            canvas.toBlob((blob) => resolve(blob!), "image/png", 1.0);
-          };
-          fi.src = "data:image/jpeg;base64," + faceB64;
-        } else {
-          doText();
-          canvas.toBlob((blob) => resolve(blob!), "image/png", 1.0);
-        }
+        // Add a subtle "no image generated" indicator
+        ctx.font = `400 ${Math.round(14 * F)}px 'Bricolage Grotesque', sans-serif`;
+        ctx.fillStyle = "rgba(255,255,255,0.2)";
+        ctx.textAlign = "center";
+        ctx.fillText("⚠ Image generation failed — API error", CW / 2, CH * 0.35);
+        ctx.textAlign = "start";
+
+        doText();
+        canvas.toBlob((blob) => resolve(blob!), "image/png", 1.0);
         return;
       }
     };
