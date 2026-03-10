@@ -9,9 +9,24 @@ export interface SlideData {
   num: string;
 }
 
+/**
+ * Layout position determines where text will be placed on the slide.
+ * The compositor and prompt system both use this to coordinate
+ * image generation with typography placement.
+ */
+export type LayoutPosition =
+  | 'bottom-left'      // Text block bottom-left, subject top/right (default for person scenes)
+  | 'bottom-center'    // Text block bottom-center, subject/scene fills top
+  | 'right'            // Text block right side, subject left side
+  | 'left'             // Text block left side, subject right side
+  | 'top-center'       // Text block top-center, subject bottom
+  | 'center'           // Text centered vertically, dark/abstract background
+  | 'split-bottom';    // Two-column bottom: title left, subtitle right
+
 export interface ProcessedSlide extends SlideData {
   prompt: { pos: string; neg: string };
   layout: string;
+  layoutPosition: LayoutPosition;
   fmt: string;
   style: string;
   light: string;
