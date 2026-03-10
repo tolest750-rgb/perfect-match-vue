@@ -377,34 +377,25 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
           ctx.drawImage(fi, fx, CH * 0.05, fw, fh);
           ctx.restore();
           doText();
-          createImageBitmap(canvas, {
-            resizeWidth:   CW * 2,
-            resizeHeight:  CH * 2,
-            resizeQuality: "high",
-          }).then((bmp) => {
-            const up = document.createElement("canvas");
-            up.width  = CW * 2;
-            up.height = CH * 2;
-            const uc = up.getContext("2d")!;
-            uc.imageSmoothingEnabled = true;
-            uc.imageSmoothingQuality = "high";
-            uc.drawImage(bmp, 0, 0);
-            bmp.close();
-            up.toBlob((b) => resolve(b!), "image/png", 1.0);
-          }).catch(() => {
-            canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
-          });
-        };
-        fi.onerror = () => {
-          doText();
-          canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
-        };
-        fi.src = "data:image/jpeg;base64," + faceB64;
-      } else {
-        doText();
-        canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
-      }
-    };
+          const up = document.createElement("canvas");
+        up.width  = CW * 2;
+        up.height = CH * 2;
+        const uc = up.getContext("2d")!;
+        uc.imageSmoothingEnabled = true;
+        uc.imageSmoothingQuality = "high";
+        uc.drawImage(canvas, 0, 0, up.width, up.height);
+        up.toBlob((b) => resolve(b!), "image/png", 1.0);
+                };
+                fi.onerror = () => {
+                  doText();
+                  canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
+                };
+                fi.src = "data:image/jpeg;base64," + faceB64;
+              } else {
+                doText();
+                canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
+              }
+            };
 
     // ── Fluxo principal ────────────────────────────────────────────
     if (imgSrc) {
