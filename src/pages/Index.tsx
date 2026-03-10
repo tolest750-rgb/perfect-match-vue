@@ -1,19 +1,18 @@
-import { useState, useEffect } from 'react';
-import { CarouselProvider } from '@/lib/carousel-store';
-import { Navbar } from '@/components/Navbar';
-import { Sidebar } from '@/components/Sidebar';
-import { OutputPanel } from '@/components/OutputPanel';
-import { Lightbox } from '@/components/Lightbox';
+import { useState, useEffect } from "react";
+import { Navbar } from "@/components/Navbar";
+import { Sidebar } from "@/components/Sidebar";
+import { OutputPanel } from "@/components/OutputPanel";
+import { Lightbox } from "@/components/Lightbox";
 
 function CarouselStudio() {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   useEffect(() => {
     const handleKeydown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setLightboxSrc(null);
+      if (e.key === "Escape") setLightboxSrc(null);
     };
-    document.addEventListener('keydown', handleKeydown);
-    return () => document.removeEventListener('keydown', handleKeydown);
+    document.addEventListener("keydown", handleKeydown);
+    return () => document.removeEventListener("keydown", handleKeydown);
   }, []);
 
   return (
@@ -28,10 +27,6 @@ function CarouselStudio() {
   );
 }
 
-const Index = () => (
-  <CarouselProvider>
-    <CarouselStudio />
-  </CarouselProvider>
-);
+const Index = () => <CarouselStudio />;
 
 export default Index;
