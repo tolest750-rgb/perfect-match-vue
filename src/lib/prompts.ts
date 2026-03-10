@@ -63,7 +63,6 @@ const PERSON_KEYWORDS = [
   "expert",
 ];
 
-// Keywords that suggest person is on the left side of the scene
 const PERSON_LEFT_HINTS = [
   "segurando",
   "holding",
@@ -78,7 +77,6 @@ const PERSON_LEFT_HINTS = [
   "olhando para direita",
 ];
 
-// Keywords that suggest person is on the right side
 const PERSON_RIGHT_HINTS = [
   "computador",
   "laptop",
@@ -92,7 +90,6 @@ const PERSON_RIGHT_HINTS = [
   "desk",
 ];
 
-// Keywords for abstract/object scenes (no person)
 const ABSTRACT_KEYWORDS = [
   "número",
   "number",
@@ -112,7 +109,6 @@ const ABSTRACT_KEYWORDS = [
   "conceptual",
 ];
 
-// Keywords for scene/environment shots
 const SCENE_KEYWORDS = [
   "estrada",
   "road",
@@ -149,18 +145,6 @@ function hasKeywords(visual: string, keywords: string[]): boolean {
 }
 
 // ─── LAYOUT POSITION DETECTION ────────────────────────────────
-/**
- * Analyzes the VISUAL description to determine the optimal
- * text placement position on the slide.
- *
- * Patterns (inspired by real carousel references):
- * - Person on left → text right
- * - Person on right / at computer → text left
- * - Person centered / group photo → text bottom-center
- * - Abstract / 3D element → text bottom-center or center
- * - Scene / environment → text bottom-left
- * - No clear subject → text top-center
- */
 export function detectLayoutPosition(sl: SlideData, slideIndex: number, totalSlides: number): LayoutPosition {
   const visual = (sl.visual ?? "").toLowerCase();
   const hasPerson = visualHasPerson(visual);
@@ -170,38 +154,25 @@ export function detectLayoutPosition(sl: SlideData, slideIndex: number, totalSli
   const hasPersonRight = hasKeywords(visual, PERSON_RIGHT_HINTS);
   const hasLongSubtitle = (sl.subtitulo?.length ?? 0) > 100;
 
-  // Abstract / 3D visual elements → center or bottom-center
-  if (isAbstract && !hasPerson) {
-    return "bottom-center";
-  }
+  if (isAbstract && !hasPerson) return "bottom-center";
+  if (isScene && !hasPerson) return hasLongSubtitle ? "split-bottom" : "bottom-center";
 
-  // Group scenes / events → bottom-center (photo takes top half)
-  if (isScene && !hasPerson) {
-    return hasLongSubtitle ? "split-bottom" : "bottom-center";
-  }
-
-  // Person with directional hints
   if (hasPerson) {
     if (hasPersonLeft) return "right";
     if (hasPersonRight) return "left";
-
-    // Alternate between layouts for variety in multi-slide carousels
     const posInCarousel = slideIndex % totalSlides;
-    if (posInCarousel === 0) return "right"; // First slide: person left, text right (like ref slide 1)
-    if (posInCarousel % 3 === 0) return "left"; // Every 3rd: text left
-    if (posInCarousel % 2 === 0) return "top-center"; // Even: text top (like ref slides 3, 5)
+    if (posInCarousel === 0) return "right";
+    if (posInCarousel % 3 === 0) return "left";
+    if (posInCarousel % 2 === 0) return "top-center";
     return "bottom-left";
   }
 
-  // Long subtitle with no person → split layout
   if (hasLongSubtitle) return "split-bottom";
-
-  // Default: bottom-left
   return "bottom-left";
 }
 
 // ─── COMPOSITION INSTRUCTIONS PER LAYOUT ──────────────────────
-function getCompositionInstruction(pos: LayoutPosition, fmt: FormatKey): string {
+function getCompositionInstruction(pos: LayoutPosition): string {
   const instructions: Record<LayoutPosition, string> = {
     "bottom-left": [
       "COMPOSITION: Subject positioned in the UPPER 50% of the frame.",
@@ -209,14 +180,12 @@ function getCompositionInstruction(pos: LayoutPosition, fmt: FormatKey): string 
       "This lower zone is reserved exclusively for text overlay.",
       "Subject should be slightly off-center to the right.",
     ].join("\n"),
-
     "bottom-center": [
       "COMPOSITION: Main visual element positioned in the UPPER 55% of the frame, centered.",
       "The LOWER 40% must be a smooth dark gradient with NO scene elements.",
       "This bottom zone is strictly reserved for centered text overlay.",
       "The visual should have a natural dark falloff toward the bottom.",
     ].join("\n"),
-
     right: [
       "COMPOSITION: Subject positioned on the LEFT 50% of the frame.",
       "The RIGHT 45% should be relatively dark or have dark atmospheric depth.",
@@ -224,14 +193,12 @@ function getCompositionInstruction(pos: LayoutPosition, fmt: FormatKey): string 
       "Subject should face slightly toward the right/camera.",
       "Use dark vignetting on the right side.",
     ].join("\n"),
-
     left: [
       "COMPOSITION: Subject positioned on the RIGHT 50% of the frame.",
       "The LEFT 45% should be dark or have deep atmospheric shadows.",
       "This left zone is reserved for text overlay — keep it uncluttered.",
       "Dark vignetting on the left side for text readability.",
     ].join("\n"),
-
     "top-center": [
       "COMPOSITION: Subject positioned in the LOWER 55% of the frame.",
       "The UPPER 40% must have dark atmosphere or clean dark space.",
@@ -239,14 +206,12 @@ function getCompositionInstruction(pos: LayoutPosition, fmt: FormatKey): string 
       "Subject placed from center to bottom, looking upward or forward.",
       "Natural dark falloff toward the top of the frame.",
     ].join("\n"),
-
     center: [
       "COMPOSITION: Dark atmospheric background throughout.",
       "Main visual element can be centered but subtle.",
       "The entire frame should support text overlay with good contrast.",
       "Deep, moody, minimal background with cinematic depth.",
     ].join("\n"),
-
     "split-bottom": [
       "COMPOSITION: Scene/visual fills the UPPER 55% of the frame.",
       "The LOWER 45% must be a clean dark gradient — this is the text zone.",
@@ -255,13 +220,7 @@ function getCompositionInstruction(pos: LayoutPosition, fmt: FormatKey): string 
     ].join("\n"),
   };
 
-  const fmtHint: Record<FormatKey, string> = {
-    "4:5": "vertical 4:5 portrait format (1080×1350px)",
-    "9:16": "vertical 9:16 tall format (1080×1920px)",
-    "1:1": "square 1:1 format (1080×1080px)",
-  };
-
-  return `${fmtHint[fmt]}\n${instructions[pos]}`;
+  return instructions[pos];
 }
 
 // ─── BUILD PROMPT ─────────────────────────────────────────────
@@ -273,12 +232,21 @@ export function buildPrompt(
   layoutPos: LayoutPosition,
   options?: { useFaceRef?: boolean },
 ) {
-  const hasPerson = options?.useFaceRef ?? visualHasPerson(sl.visual ?? "");
+  // ← useFaceRef e fmtHint declarados DENTRO da função
+  const useFaceRef = options?.useFaceRef ?? false;
 
-  const faceInstruction = hasPerson
+  const fmtHint: Record<FormatKey, string> = {
+    "4:5": "vertical 4:5 portrait format (1080×1350px)",
+    "9:16": "vertical 9:16 tall format (1080×1920px)",
+    "1:1": "square 1:1 format (1080×1080px)",
+  };
+
+  // Face reference: só incluída quando o VISUAL menciona uma pessoa
+  // e o slide foi marcado para usar face ref
+  const faceInstruction = useFaceRef
     ? [
-        "CRITICAL INSTRUCTION — FACE REFERENCE USAGE:",
-        "A reference photo is attached. Use it ONLY to extract the facial identity of the person.",
+        "FACE REFERENCE IMAGE ATTACHED:",
+        "Use it ONLY to extract the facial identity of the person.",
         "DO NOT reproduce, paste, composite or reuse the reference photo background, clothing, pose or lighting.",
         "Study ONLY the unique facial features: face shape, eye color/shape, skin tone, nose, lips, jawline, brow, hair.",
         "GENERATE a completely new photograph of this same person FROM SCRATCH, naturally in the scene described below.",
@@ -286,18 +254,21 @@ export function buildPrompt(
       ].join(" ")
     : "";
 
-  const compositionInstruction = getCompositionInstruction(layoutPos, fmt);
+  const compositionInstruction = getCompositionInstruction(layoutPos);
   const textElementsHint = buildTextElementsHint(sl, layoutPos);
 
   const pos = [
-    useFace ? faceInstruction : "",
-    "",
+    faceInstruction,
     "SCENE DESCRIPTION:",
     fmtHint[fmt],
     STYLES[style],
     sl.visual,
     LIGHTS[light],
     sl.design || "",
+    "",
+    "COMPOSITION RULES:",
+    compositionInstruction,
+    textElementsHint,
     "",
     "QUALITY:",
     "professional commercial photography, dramatic atmospheric depth, cinematic bokeh, subject in sharp focus, dark rich background, high production value",
@@ -312,7 +283,7 @@ export function buildPrompt(
 
 function buildTextElementsHint(sl: SlideData, pos: LayoutPosition): string {
   const textElements: string[] = [];
-  if (sl.titulo) textElements.push(`a large bold title`);
+  if (sl.titulo) textElements.push("a large bold title");
   if (sl.subtitulo) textElements.push("a subtitle paragraph");
   if (sl.cta) textElements.push("a call-to-action button");
 
