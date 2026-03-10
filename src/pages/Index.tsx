@@ -3,6 +3,7 @@ import { Navbar } from "@/components/Navbar";
 import { Sidebar } from "@/components/Sidebar";
 import { OutputPanel } from "@/components/OutputPanel";
 import { Lightbox } from "@/components/Lightbox";
+import { CarouselProvider } from "@/lib/carousel-store";
 
 function CarouselStudio() {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -16,14 +17,14 @@ function CarouselStudio() {
   }, []);
 
   return (
-    <>
+    <CarouselProvider>
       <Navbar />
       <div className="grid grid-cols-[340px_1fr] max-[900px]:grid-cols-1 min-h-[calc(100vh-60px)] mt-[60px]">
         <Sidebar />
         <OutputPanel onImageClick={setLightboxSrc} />
       </div>
       <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
-    </>
+    </CarouselProvider>
   );
 }
 
