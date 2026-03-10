@@ -639,6 +639,7 @@ export async function composeSlide(
   await ensureFont();
 
   const L = aiLayout ?? DEFAULT_LAYOUT;
+  const titleInImage = visualHasTitleInImage(sl.visual ?? "");
   const [W, H] = DIM[sl.fmt] || [1080, 1350];
   const SC = sl.res === "4K" ? 1 : 2;
   const CW = W * SC,
