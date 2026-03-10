@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from "react";
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import type { ProcessedSlide, StyleKey, LightKey, FormatKey, ResKey, LayoutPosition } from "./parser";
 import { parseSlides } from "./parser";
 import { buildPrompt, buildLayout, visualHasPerson, detectTitleStyle } from "./prompts";
