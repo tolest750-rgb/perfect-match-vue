@@ -86,6 +86,9 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const [faceB64, setFaceB64] = useState("");
   const [faceDataUrl, setFaceDataUrl] = useState("");
   const [faceName, setFaceName] = useState("");
+  const [layoutRefB64, setLayoutRefB64State] = useState("");
+  const [layoutRefDataUrl, setLayoutRefDataUrl] = useState("");
+  const [layoutRefName, setLayoutRefName] = useState("");
   const [style, setStyle] = useState<StyleKey>("cinematic");
   const [light, setLight] = useState<LightKey>("dramatic");
   const [fmt, setFmt] = useState<FormatKey>("4:5");
