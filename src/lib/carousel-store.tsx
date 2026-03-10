@@ -231,7 +231,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
       if (!sl) return;
       setVarStatus(slideIdx, varIdx, "generating");
       try {
-        const src = await callGemini(sl, varIdx, faceB64Ref.current);
+        const src = await callGemini(sl, varIdx, faceB64Ref.current, layoutRefB64Ref.current);
         const blob = await composeSlide(src, sl, faceB64Ref.current);
         const url = URL.createObjectURL(blob);
         setVarUrl(slideIdx, varIdx, url);
