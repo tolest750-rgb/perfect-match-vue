@@ -1,5 +1,6 @@
-import type { SlideData, StyleKey, LightKey, FormatKey } from "./parser";
+import type { SlideData, StyleKey, LightKey, FormatKey, LayoutPosition } from "./parser";
 
+// ─── STYLE PRESETS ────────────────────────────────────────────
 const STYLES: Record<StyleKey, string> = {
   cinematic:
     "ultra-realistic cinematic portrait photography, 85mm prime lens f/1.8, natural film grain, Hollywood color grading, photorealistic",
@@ -19,14 +20,8 @@ const LIGHTS: Record<LightKey, string> = {
   moody: "single Rembrandt key light, deep chiaroscuro shadows, noir palette, dramatic contrast",
 };
 
-const COMPS: Record<FormatKey, string> = {
-  "4:5": "vertical 4:5 portrait composition, subject positioned in the upper 40% of frame, the entire lower 40% must be a clean dark gradient with NO objects, NO details, NO scenery — this area is reserved exclusively for text overlay",
-  "9:16": "vertical 9:16 tall portrait composition, subject positioned in upper third of frame, the lower 50% must be a clean dark empty area with smooth gradient falloff — this zone is strictly reserved for typography overlay, keep it completely clear of any subjects or scene elements",
-  "1:1": "square 1:1 composition, subject positioned in upper-right quadrant, the lower-left area must be clean dark negative space reserved for text overlay",
-};
-
 const NEG =
-  "text, typography, letters, words, watermark, logo, overlay text, speech bubbles, cartoon, anime, illustration, CGI, low quality, blurry, distorted face, different person, wrong identity, bad anatomy, deformed, objects in lower portion of image, busy background in text area, clutter in bottom half";
+  "text, typography, letters, words, watermark, logo, overlay text, speech bubbles, cartoon, anime, illustration, CGI, low quality, blurry, distorted face, different person, wrong identity, bad anatomy, deformed";
 
 export const VAR_HINTS = [
   "",
@@ -35,6 +30,7 @@ export const VAR_HINTS = [
   ", unique creative framing, slightly different light mood",
 ];
 
+// ─── PERSON DETECTION ─────────────────────────────────────────
 const PERSON_KEYWORDS = [
   'pessoa', 'homem', 'mulher', 'menino', 'menina', 'criança',
   'executivo', 'empresário', 'empresária', 'líder', 'atleta',
@@ -43,16 +39,170 @@ const PERSON_KEYWORDS = [
   'person', 'man', 'woman', 'boy', 'girl', 'human', 'speaker', 'expert',
 ];
 
+// Keywords that suggest person is on the left side of the scene
+const PERSON_LEFT_HINTS = [
+  'segurando', 'holding', 'carregando', 'carrying', 'caixa', 'box',
+  'microfone', 'microphone', 'perfil', 'profile', 'olhando para direita',
+];
+
+// Keywords that suggest person is on the right side
+const PERSON_RIGHT_HINTS = [
+  'computador', 'laptop', 'notebook', 'tela', 'screen', 'trabalhando',
+  'digitando', 'typing', 'mesa', 'desk',
+];
+
+// Keywords for abstract/object scenes (no person)
+const ABSTRACT_KEYWORDS = [
+  'número', 'number', 'texto 3d', '3d text', 'gráfico', 'chart',
+  'estatística', 'dados', 'data', 'ícone', 'icon', 'símbolo',
+  'abstract', 'abstrato', 'conceitual', 'conceptual',
+];
+
+// Keywords for scene/environment shots
+const SCENE_KEYWORDS = [
+  'estrada', 'road', 'cidade', 'city', 'paisagem', 'landscape',
+  'escritório', 'office', 'palco', 'stage', 'evento', 'event',
+  'plateia', 'audience', 'grupo', 'group', 'equipe', 'team',
+  'multidão', 'crowd', 'reunião', 'meeting',
+];
+
 function visualHasPerson(visual: string): boolean {
   const v = (visual ?? '').toLowerCase();
   return PERSON_KEYWORDS.some(kw => v.includes(kw));
 }
 
+function hasKeywords(visual: string, keywords: string[]): boolean {
+  const v = (visual ?? '').toLowerCase();
+  return keywords.some(kw => v.includes(kw));
+}
+
+// ─── LAYOUT POSITION DETECTION ────────────────────────────────
+/**
+ * Analyzes the VISUAL description to determine the optimal
+ * text placement position on the slide.
+ * 
+ * Patterns (inspired by real carousel references):
+ * - Person on left → text right
+ * - Person on right / at computer → text left
+ * - Person centered / group photo → text bottom-center
+ * - Abstract / 3D element → text bottom-center or center
+ * - Scene / environment → text bottom-left
+ * - No clear subject → text top-center
+ */
+export function detectLayoutPosition(
+  sl: SlideData,
+  slideIndex: number,
+  totalSlides: number
+): LayoutPosition {
+  const visual = (sl.visual ?? '').toLowerCase();
+  const hasPerson = visualHasPerson(visual);
+  const isAbstract = hasKeywords(visual, ABSTRACT_KEYWORDS);
+  const isScene = hasKeywords(visual, SCENE_KEYWORDS);
+  const hasPersonLeft = hasKeywords(visual, PERSON_LEFT_HINTS);
+  const hasPersonRight = hasKeywords(visual, PERSON_RIGHT_HINTS);
+  const hasLongSubtitle = (sl.subtitulo?.length ?? 0) > 100;
+
+  // Abstract / 3D visual elements → center or bottom-center
+  if (isAbstract && !hasPerson) {
+    return 'bottom-center';
+  }
+
+  // Group scenes / events → bottom-center (photo takes top half)
+  if (isScene && !hasPerson) {
+    return hasLongSubtitle ? 'split-bottom' : 'bottom-center';
+  }
+
+  // Person with directional hints
+  if (hasPerson) {
+    if (hasPersonLeft) return 'right';
+    if (hasPersonRight) return 'left';
+    
+    // Alternate between layouts for variety in multi-slide carousels
+    const posInCarousel = slideIndex % totalSlides;
+    if (posInCarousel === 0) return 'right';       // First slide: person left, text right (like ref slide 1)
+    if (posInCarousel % 3 === 0) return 'left';     // Every 3rd: text left
+    if (posInCarousel % 2 === 0) return 'top-center'; // Even: text top (like ref slides 3, 5)
+    return 'bottom-left';
+  }
+
+  // Long subtitle with no person → split layout
+  if (hasLongSubtitle) return 'split-bottom';
+
+  // Default: bottom-left
+  return 'bottom-left';
+}
+
+// ─── COMPOSITION INSTRUCTIONS PER LAYOUT ──────────────────────
+function getCompositionInstruction(pos: LayoutPosition, fmt: FormatKey): string {
+  const instructions: Record<LayoutPosition, string> = {
+    'bottom-left': [
+      "COMPOSITION: Subject positioned in the UPPER 50% of the frame.",
+      "The LOWER 45% must be a clean dark gradient area — NO objects, NO details.",
+      "This lower zone is reserved exclusively for text overlay.",
+      "Subject should be slightly off-center to the right.",
+    ].join('\n'),
+    
+    'bottom-center': [
+      "COMPOSITION: Main visual element positioned in the UPPER 55% of the frame, centered.",
+      "The LOWER 40% must be a smooth dark gradient with NO scene elements.",
+      "This bottom zone is strictly reserved for centered text overlay.",
+      "The visual should have a natural dark falloff toward the bottom.",
+    ].join('\n'),
+    
+    'right': [
+      "COMPOSITION: Subject positioned on the LEFT 50% of the frame.",
+      "The RIGHT 45% should be relatively dark or have dark atmospheric depth.",
+      "This right zone is reserved for text overlay — keep it clean and readable.",
+      "Subject should face slightly toward the right/camera.",
+      "Use dark vignetting on the right side.",
+    ].join('\n'),
+    
+    'left': [
+      "COMPOSITION: Subject positioned on the RIGHT 50% of the frame.",
+      "The LEFT 45% should be dark or have deep atmospheric shadows.",
+      "This left zone is reserved for text overlay — keep it uncluttered.",
+      "Dark vignetting on the left side for text readability.",
+    ].join('\n'),
+    
+    'top-center': [
+      "COMPOSITION: Subject positioned in the LOWER 55% of the frame.",
+      "The UPPER 40% must have dark atmosphere or clean dark space.",
+      "This upper zone is reserved for bold text overlay.",
+      "Subject placed from center to bottom, looking upward or forward.",
+      "Natural dark falloff toward the top of the frame.",
+    ].join('\n'),
+    
+    'center': [
+      "COMPOSITION: Dark atmospheric background throughout.",
+      "Main visual element can be centered but subtle.",
+      "The entire frame should support text overlay with good contrast.",
+      "Deep, moody, minimal background with cinematic depth.",
+    ].join('\n'),
+    
+    'split-bottom': [
+      "COMPOSITION: Scene/visual fills the UPPER 55% of the frame.",
+      "The LOWER 45% must be a clean dark gradient — this is the text zone.",
+      "The transition from scene to dark should be smooth and cinematic.",
+      "Bottom area needs to support a two-column text layout.",
+    ].join('\n'),
+  };
+  
+  const fmtHint: Record<FormatKey, string> = {
+    "4:5": "vertical 4:5 portrait format (1080×1350px)",
+    "9:16": "vertical 9:16 tall format (1080×1920px)",
+    "1:1": "square 1:1 format (1080×1080px)",
+  };
+
+  return `${fmtHint[fmt]}\n${instructions[pos]}`;
+}
+
+// ─── BUILD PROMPT ─────────────────────────────────────────────
 export function buildPrompt(
   sl: SlideData,
   style: StyleKey,
   light: LightKey,
   fmt: FormatKey,
+  layoutPos: LayoutPosition,
   options?: { useFaceRef?: boolean }
 ) {
   const hasPerson = options?.useFaceRef ?? visualHasPerson(sl.visual ?? '');
@@ -68,19 +218,23 @@ export function buildPrompt(
       ].join(' ')
     : '';
 
-  const layoutInstruction = buildLayoutCompositionHint(sl, fmt);
+  const compositionInstruction = getCompositionInstruction(layoutPos, fmt);
+  const textElementsHint = buildTextElementsHint(sl, layoutPos);
 
   const pos = [
     faceInstruction,
+    "",
     "SCENE DESCRIPTION:",
     STYLES[style],
     sl.visual,
     LIGHTS[light],
     sl.design || "",
     "",
-    "COMPOSITION & LAYOUT RULES:",
-    COMPS[fmt],
-    layoutInstruction,
+    "LAYOUT & COMPOSITION RULES:",
+    compositionInstruction,
+    "",
+    "TYPOGRAPHY SAFE ZONE — MANDATORY:",
+    textElementsHint,
     "",
     "QUALITY:",
     "professional commercial photography, dramatic atmospheric depth, cinematic bokeh, subject in sharp focus, dark rich background, high production value",
@@ -93,38 +247,35 @@ export function buildPrompt(
   return { pos, neg: NEG };
 }
 
-function buildLayoutCompositionHint(sl: SlideData, fmt: FormatKey): string {
-  const hasTitle = !!sl.titulo;
-  const hasSubtitle = !!sl.subtitulo;
-  const hasCta = !!sl.cta;
-
+function buildTextElementsHint(sl: SlideData, pos: LayoutPosition): string {
   const textElements: string[] = [];
-  if (hasTitle) textElements.push(`a large title ("${sl.titulo.substring(0, 30)}...")`);
-  if (hasSubtitle) textElements.push("a subtitle line");
-  if (hasCta) textElements.push("a call-to-action button");
+  if (sl.titulo) textElements.push(`a large bold title`);
+  if (sl.subtitulo) textElements.push("a subtitle paragraph");
+  if (sl.cta) textElements.push("a call-to-action button");
+  
+  if (!textElements.length) return "";
 
-  const textDesc = textElements.length > 0
-    ? `The following text elements will be composited over the image: ${textElements.join(", ")}.`
-    : "";
-
-  const zoneMap: Record<FormatKey, string> = {
-    "4:5": "the bottom 40% of the frame",
-    "9:16": "the bottom 50% of the frame",
-    "1:1": "the bottom-left 40% of the frame",
+  const zoneMap: Record<LayoutPosition, string> = {
+    'bottom-left': "the bottom-left 45% of the frame",
+    'bottom-center': "the bottom 40% of the frame, centered",
+    'right': "the right 45% of the frame, vertically centered",
+    'left': "the left 45% of the frame, vertically centered",
+    'top-center': "the top 40% of the frame, centered",
+    'center': "the center of the frame",
+    'split-bottom': "the bottom 45% of the frame in two columns",
   };
 
   return [
-    "TYPOGRAPHY SAFE ZONE — MANDATORY:",
-    textDesc,
-    `These text elements will be placed in ${zoneMap[fmt]}.`,
-    `Therefore, ${zoneMap[fmt]} MUST be kept completely clean — use only a smooth dark gradient or deep shadow falloff.`,
-    "Do NOT place the subject's body, hands, important props, or any scene details in this text zone.",
-    "The subject should be positioned ABOVE and AWAY from this reserved area.",
-    "Think of it as a photographer deliberately composing the shot to leave space for a magazine text overlay.",
+    `The following text elements will be composited over the image: ${textElements.join(", ")}.`,
+    `These elements will be placed in ${zoneMap[pos]}.`,
+    `That zone MUST be kept clean — use only smooth dark gradients or deep shadows there.`,
+    "Do NOT place the subject's body, important props, or scene details in this text zone.",
+    "Think of it as a photographer composing the shot to leave space for a magazine text overlay.",
   ].join("\n");
 }
 
-export function buildLayout(sl: SlideData, light: LightKey, fmt: FormatKey) {
+// ─── BUILD LAYOUT (for the compositor) ────────────────────────
+export function buildLayout(sl: SlideData, light: LightKey, fmt: FormatKey, layoutPos: LayoutPosition) {
   const ACC: Record<LightKey, string> = {
     dramatic: '#00b4ff',
     warm:     '#f5c842',
@@ -137,65 +288,40 @@ export function buildLayout(sl: SlideData, light: LightKey, fmt: FormatKey) {
     '1:1':  '1080×1080px',
   };
   const accent = ACC[light];
-  const hasPerson = visualHasPerson(sl.visual ?? '');
 
-  const textZone = hasPerson
-    ? 'Zona inferior: últimos 45% da altura — gradiente cobre essa área inteiramente'
-    : 'Zona inferior: últimos 55% da altura — fundo escuro sólido/gradiente nessa área';
-
-  return `LAYOUT — SLIDE ${sl.num} | ${DIM[fmt]}
+  return `LAYOUT — SLIDE ${sl.num} | ${DIM[fmt]} | Position: ${layoutPos}
 ════════════════════════════════════
 REFERÊNCIA ESTÉTICA: editorial bold, neon accent, dark background
 Inspiração: carrossel de marca pessoal estilo agência premium brasileira
 
-MARGENS (todas as bordas):
-  Horizontal: 76px (7% de 1080px)
-  Vertical topo/base: 81px (6% da altura)
-  Mínimo entre elementos: 14px
-
-OVERLAY / GRADIENTE:
-  linear-gradient(to top,
-    rgba(0,0,0,0.95) 0%,
-    rgba(0,0,0,0.80) 30%,
-    rgba(0,0,0,0.35) 55%,
-    rgba(0,0,0,0.00) 78%
-  )
-  ${textZone}
+ACCENT COLOR: ${accent}
+LAYOUT POSITION: ${layoutPos}
 
 ── HIERARQUIA TIPOGRÁFICA ──────────
 
 ① NÚMERO DO SLIDE [${sl.num}]
   Font: Bricolage Grotesque 700 | 13px | tracking: 2px
   Cor: rgba(255,255,255,0.38)
-  Posição: topo esquerdo com margem completa (76px, 81px)
 
 ② TÍTULO: "${sl.titulo}"
-  Font: Bricolage Grotesque 800 | 42–48px | max 2 linhas | line-height: 1.12
-  Cor: ${accent}   ← cor de acento do tema (NÃO branco — destaque máximo)
-  Uppercase se ≤ 4 palavras; title-case se > 4 palavras
-  Margem esquerda: 76px | Margem direita: 76px
+  Font: Bricolage Grotesque 900 Italic | 44–52px | max 3 linhas | line-height: 1.08
+  Cor: ${accent} (cor de acento — NUNCA branco)
+  Uppercase
 
 ③ SUBTÍTULO: "${sl.subtitulo}"
-  Font: Bricolage Grotesque 300 | 17px | line-height: 1.55
-  Cor: rgba(255,255,255,0.88)
-  Espaço do título: 16px
-  Margem esquerda: 76px | Largura máxima: 928px (CW − 2×76px)
+  Font: Bricolage Grotesque 400 | 18px | line-height: 1.55
+  Cor: rgba(255,255,255,0.90)
+  Palavras-chave em bold branco puro
 ${sl.cta ? `
 ④ CTA: "${sl.cta}"
   Font: Bricolage Grotesque 700 | 12px | uppercase | tracking: 1.5px
   Background: ${accent} | Cor texto: #000000
-  Padding: 12px 22px | border-radius: 8px
-  Posição: alinhado à ESQUERDA (76px) | espaço do subtítulo: 20px
-  NÃO colocar no canto direito — alinhado com o texto` : ''}
+  Padding: 12px 22px | border-radius: 8px` : ''}
 
-── REGRAS DE COMPOSIÇÃO ────────────
-- Título sempre em ${accent} — nunca branco puro para o título principal
-- Subtítulo sempre em branco/quase-branco — hierarquia clara com o título
-- CTA alinhado à esquerda junto ao bloco de texto (não canto direito)
-- Bloco de texto deve "respirar" — espaçamento generoso entre elementos
-- Fundo da zona de texto: escuro o suficiente para o texto ser legível sem esforço
-- Se não há pessoa na cena: zona de texto pode ser fundo quase-sólido (como slides 2, 4, 6, 7 das refs)
-- Se há pessoa na cena: gradiente sobe pela figura preservando rosto (como slides 1, 3, 5, 8 das refs)
-
+── REGRAS ─────────────────────────
+- Título SEMPRE em ${accent} — nunca branco
+- Subtítulo branco com palavras-chave em bold
+- Hierarquia visual clara: título > subtítulo > CTA
+- Fundo da zona de texto escuro o suficiente para legibilidade
 ════════════════════════════════════`;
 }
