@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from "react";
 import type { ProcessedSlide, StyleKey, LightKey, FormatKey, ResKey } from "./parser";
 import { parseSlides } from "./parser";
-import { buildPrompt, buildLayout, detectLayoutPosition } from "./prompts";
+import { buildPrompt, buildLayout, visualHasPerson } from "./prompts";
+import { analyzeLayout, composeSlide } from "./compositor";
+import type { AILayout } from "./compositor";
 import { callGemini } from "./gemini";
-import { composeSlide } from "./compositor";
 
+// ─── TYPES ────────────────────────────────────────────────────
 interface CarouselState {
   faceB64: string;
   faceDataUrl: string;
@@ -49,33 +51,7 @@ export function useCarousel() {
   return ctx;
 }
 
-const PERSON_KEYWORDS = [
-  "pessoa",
-  "homem",
-  "mulher",
-  "menino",
-  "menina",
-  "criança",
-  "executivo",
-  "empresário",
-  "líder",
-  "atleta",
-  "médico",
-  "profissional",
-  "founder",
-  "person",
-  "man",
-  "woman",
-  "boy",
-  "girl",
-  "child",
-  "human",
-  "ceo",
-  "speaker",
-];
-
-const visualMentionsPerson = (visual: string) => PERSON_KEYWORDS.some((kw) => visual.toLowerCase().includes(kw));
-
+// ─── PERSON DETECTION (named person heuristic) ────────────────
 const visualMentionsNamedPerson = (visual: string): boolean => {
   const properNamePattern = /\b[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+)+\b/g;
   const matches = visual.match(properNamePattern) || [];
@@ -91,12 +67,60 @@ const visualMentionsNamedPerson = (visual: string): boolean => {
     "com fundo",
     "olhando para",
   ];
-  return matches.some((m) => {
-    const lower = m.toLowerCase();
-    return !commonPhrases.some((cp) => lower.includes(cp));
-  });
+  return matches.some((m) => !commonPhrases.some((cp) => m.toLowerCase().includes(cp)));
 };
 
+// ─── HELPER: reduz imagem para base64 pequena p/ análise ──────
+async function shrinkToBase64(imgSrc: string, w: number, h: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      c.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL("image/jpeg", 0.8).split(",")[1]);
+    };
+    img.onerror = reject;
+    img.src = imgSrc;
+  });
+}
+
+// ─── PIPELINE: gerar → analisar → compor ─────────────────────
+async function generateAndCompose(
+  sl: ProcessedSlide,
+  varIdx: number,
+  faceB64: string,
+  isFirstOrLast: boolean,
+): Promise<{ blob: Blob; url: string }> {
+  // 1. Gera imagem
+  const imgSrc = await callGemini(sl, varIdx, faceB64);
+
+  // 2. Analisa layout com Haiku (se imagem gerada)
+  let aiLayout: AILayout | undefined;
+  if (imgSrc) {
+    try {
+      const snapDims: Record<string, [number, number]> = {
+        "4:5": [540, 675],
+        "9:16": [405, 720],
+        "1:1": [540, 540],
+      };
+      const [sw, sh] = snapDims[sl.fmt] ?? [540, 675];
+      const snap = await shrinkToBase64(imgSrc, sw, sh);
+      aiLayout = await analyzeLayout(snap, sl.titulo, sl.subtitulo ?? "", !!sl.cta, sl.fmt);
+    } catch {
+      /* usa DEFAULT_LAYOUT */
+    }
+  }
+
+  // 3. Compõe slide com posição IA + flag de logo
+  const blob = await composeSlide(imgSrc, sl, faceB64, aiLayout, isFirstOrLast);
+  const url = URL.createObjectURL(blob);
+  return { blob, url };
+}
+
+// ─── PROVIDER ────────────────────────────────────────────────
 export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const [faceB64, setFaceB64] = useState("");
   const [faceDataUrl, setFaceDataUrl] = useState("");
@@ -122,11 +146,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const faceB64Ref = useRef(faceB64);
   faceB64Ref.current = faceB64;
 
-  // layoutRefB64Ref mantido apenas para o estado da UI (FaceUpload exibe preview)
-  // NÃO é mais enviado para a API de geração de imagem
-  const layoutRefB64Ref = useRef(layoutRefB64);
-  layoutRefB64Ref.current = layoutRefB64;
-
   const setFace = useCallback((file: File) => {
     const r = new FileReader();
     r.onload = (e) => {
@@ -146,25 +165,19 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
       const dataUrl = e.target?.result as string;
       const b64 = dataUrl.split(",")[1];
       setLayoutRefB64State(b64);
-      layoutRefB64Ref.current = b64;
       setLayoutRefDataUrl(dataUrl);
       setLayoutRefName(file.name);
     };
     r.readAsDataURL(file);
   }, []);
 
-  const setVarUrl = (slideIdx: number, varIdx: number, url: string) => {
-    setVarUrls((prev) => ({ ...prev, [`${slideIdx}_${varIdx}`]: url }));
-  };
-  const setVarStatus = (slideIdx: number, varIdx: number, status: "idle" | "generating" | "done" | "error") => {
-    setVarStatuses((prev) => ({ ...prev, [`${slideIdx}_${varIdx}`]: status }));
-  };
-  const setSlideStatus = (idx: number, status: "idle" | "processing" | "complete" | "error") => {
-    setSlideStatuses((prev) => ({ ...prev, [idx]: status }));
-  };
-  const setSlideStep = (idx: number, step: number, status: "" | "active" | "done" | "error") => {
-    setSlideSteps((prev) => ({ ...prev, [`${idx}_${step}`]: status }));
-  };
+  const setVarUrl = (si: number, vi: number, url: string) => setVarUrls((p) => ({ ...p, [`${si}_${vi}`]: url }));
+  const setVarStatus = (si: number, vi: number, s: "idle" | "generating" | "done" | "error") =>
+    setVarStatuses((p) => ({ ...p, [`${si}_${vi}`]: s }));
+  const setSlideStatus = (i: number, s: "idle" | "processing" | "complete" | "error") =>
+    setSlideStatuses((p) => ({ ...p, [i]: s }));
+  const setSlideStep = (i: number, step: number, s: "" | "active" | "done" | "error") =>
+    setSlideSteps((p) => ({ ...p, [`${i}_${step}`]: s }));
 
   const startGeneration = useCallback(async () => {
     if (!rawText.trim()) return;
@@ -172,21 +185,16 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     if (!parsed.length) return;
 
     const hasFaceRef = !!faceB64Ref.current;
+    const totalSlides = parsed.length;
 
     const processedSlides: ProcessedSlide[] = parsed.map((s, i) => {
-      const layoutPos = detectLayoutPosition(s, i, parsed.length);
       const isFirstSlide = i === 0;
-
       const useFaceRef =
-        hasFaceRef &&
-        visualMentionsPerson(s.visual ?? "") &&
-        (isFirstSlide || !visualMentionsNamedPerson(s.visual ?? ""));
-      hasFaceRef && visualMentionsPerson(s.visual ?? "") && !visualMentionsNamedPerson(s.visual ?? "");
+        hasFaceRef && visualHasPerson(s.visual ?? "") && (isFirstSlide || !visualMentionsNamedPerson(s.visual ?? ""));
       return {
         ...s,
-        prompt: buildPrompt(s, style, light, fmt, layoutPos, { useFaceRef }),
-        layout: buildLayout(s, light, fmt, layoutPos),
-        layoutPosition: layoutPos,
+        prompt: buildPrompt(s, style, light, fmt, { useFaceRef }),
+        layout: buildLayout(light),
         useFaceRef,
         fmt,
         style,
@@ -203,40 +211,33 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     setSlideSteps({});
     setIsGenerating(true);
     setGenerationComplete(false);
-    setProgress({ done: 0, total: processedSlides.length });
+    setProgress({ done: 0, total: totalSlides });
 
     const newBlobs: Record<number, (Blob | null)[]> = {};
 
     for (let i = 0; i < processedSlides.length; i++) {
-      setProgress({ done: i, total: processedSlides.length });
+      setProgress({ done: i, total: totalSlides });
       setSlideStatus(i, "processing");
       setSlideStep(i, 1, "active");
       newBlobs[i] = new Array(4).fill(null);
       [0, 1, 2, 3].forEach((v) => setVarStatus(i, v, "generating"));
 
-      try {
-        // ← layoutRefB64 removido — não vai mais para a API de imagem
-        const imgJobs = [0, 1, 2, 3].map((v) => callGemini(processedSlides[i], v, faceB64Ref.current));
-        const results = await Promise.allSettled(imgJobs);
-        setSlideStep(i, 1, "done");
-        setSlideStep(i, 2, "active");
+      // 1º slide (i===0) e último (i===totalSlides-1) recebem logo
+      const isFirstOrLast = i === 0 || i === totalSlides - 1;
 
-        const compJobs = results.map((res, v) => {
-          const src = res.status === "fulfilled" ? res.value : null;
-          return composeSlide(src, processedSlides[i], faceB64Ref.current)
-            .then((blob) => {
+      try {
+        const varJobs = [0, 1, 2, 3].map((v) =>
+          generateAndCompose(processedSlides[i], v, faceB64Ref.current, isFirstOrLast)
+            .then(({ blob, url }) => {
               newBlobs[i][v] = blob;
-              const url = URL.createObjectURL(blob);
               setVarUrl(i, v, url);
               setVarStatus(i, v, "done");
               setComposedBlobs((prev) => ({ ...prev, [i]: [...newBlobs[i]] }));
             })
-            .catch(() => {
-              setVarStatus(i, v, "error");
-            });
-        });
-
-        await Promise.all(compJobs);
+            .catch(() => setVarStatus(i, v, "error")),
+        );
+        await Promise.all(varJobs);
+        setSlideStep(i, 1, "done");
         setSlideStep(i, 2, "done");
         setSlideStep(i, 3, "done");
         setSlideStatus(i, "complete");
@@ -247,7 +248,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    setProgress({ done: processedSlides.length, total: processedSlides.length });
+    setProgress({ done: totalSlides, total: totalSlides });
     setIsGenerating(false);
     setGenerationComplete(true);
   }, [rawText, style, light, fmt, res]);
@@ -256,12 +257,11 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     async (slideIdx: number, varIdx: number) => {
       const sl = slides[slideIdx];
       if (!sl) return;
+      // Determina se este slide é primeiro ou último
+      const isFirstOrLast = slideIdx === 0 || slideIdx === slides.length - 1;
       setVarStatus(slideIdx, varIdx, "generating");
       try {
-        // ← layoutRefB64 removido — não vai mais para a API de imagem
-        const src = await callGemini(sl, varIdx, faceB64Ref.current);
-        const blob = await composeSlide(src, sl, faceB64Ref.current);
-        const url = URL.createObjectURL(blob);
+        const { blob, url } = await generateAndCompose(sl, varIdx, faceB64Ref.current, isFirstOrLast);
         setVarUrl(slideIdx, varIdx, url);
         setVarStatus(slideIdx, varIdx, "done");
         setComposedBlobs((prev) => {
@@ -276,10 +276,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     [slides],
   );
 
-  const getVarBlob = useCallback(
-    (slideIdx: number, varIdx: number) => composedBlobs[slideIdx]?.[varIdx] || null,
-    [composedBlobs],
-  );
+  const getVarBlob = useCallback((si: number, vi: number) => composedBlobs[si]?.[vi] || null, [composedBlobs]);
 
   const value: CarouselState & CarouselActions = {
     faceB64,
