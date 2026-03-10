@@ -25,7 +25,7 @@ export function OutputPanel({ onImageClick }: OutputPanelProps) {
       }
     }
     root.file('_prompts.txt', slides.map(s =>
-      `=== SLIDE ${s.num} ===\nPOSITIVE:\n${s.prompt.pos}\n\nNEGATIVE:\n${s.prompt.neg}\n\nLAYOUT:\n${s.layout}`
+      `=== SLIDE ${s.num} ===\nPOSITIVE:\n${s.prompt.pos}\n\nNEGATIVE:\n${s.prompt.neg}\n\nLAYOUT:\n${JSON.stringify(s.layout, null, 2)}`
     ).join('\n\n' + '─'.repeat(48) + '\n\n'));
     root.file('_data.json', JSON.stringify(slides.map(s => ({
       slide: s.n, titulo: s.titulo, subtitulo: s.subtitulo, cta: s.cta,
