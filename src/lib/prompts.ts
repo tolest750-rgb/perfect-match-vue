@@ -74,6 +74,73 @@ export function visualHasPerson(visual: string): boolean {
 const SKIN_REALISM =
   "ultra-detailed skin texture with visible pores, natural skin imperfections, subsurface scattering on skin creating translucent warmth under strong light, sharp catchlights in eyes with natural iris detail, individual hair strands visible, natural micro-expressions";
 
+// ─── TITLE STYLE DETECTION ────────────────────────────────────
+// Detecta no campo visual/design referência a estética de título de série/filme
+// Retorna um identificador de estilo para o compositor renderizar tipografia temática
+
+export type TitleStyle =
+  | "default"
+  | "everybody-hates-chris" // yellow-black sitcom block, bold stroke 2000s
+  | "stranger-things" // red neon glow, 80s ITC Benguiat horror
+  | "breaking-bad" // yellow periodic element chemistry
+  | "peaky-blinders" // gold serif on dark, ornate
+  | "money-heist" // red stencil military block
+  | "squid-game" // pink/teal geometric sans
+  | "wednesday" // gothic pale serif
+  | "succession" // minimal white uppercase serif
+  | "the-office" // plain white mockumentary doc
+  | "ozark" // blue-green dark water tones
+  | "narcos" // yellow gritty distressed
+  | "euphoria" // glitter holographic pastel
+  | "game-of-thrones" // medieval gold ornate
+  | "vikings" // runic carved stone
+  | "taxi-driver" // grungy hand-lettered yellow
+  | "pulp-fiction" // retro yellow pop-art
+  | "blade-runner" // cyan neon rain
+  | "star-wars" // gold chrome space
+  | "matrix" // green digital rain
+  | "fight-club"; // anarchist cut-out letters
+
+const TITLE_STYLE_MAP: Array<{ keywords: string[]; style: TitleStyle }> = [
+  {
+    keywords: [
+      "todo mundo odeia",
+      "everybody hates",
+      "everybody hates chris",
+      "todo mundo odeia o chris",
+      "seriado chris",
+    ],
+    style: "everybody-hates-chris",
+  },
+  { keywords: ["stranger things", "upside down", "demogorgon"], style: "stranger-things" },
+  { keywords: ["breaking bad", "heisenberg", "walter white"], style: "breaking-bad" },
+  { keywords: ["peaky blinders", "peaky", "shelby"], style: "peaky-blinders" },
+  { keywords: ["money heist", "casa de papel", "la casa de papel"], style: "money-heist" },
+  { keywords: ["squid game", "round 6", "squid"], style: "squid-game" },
+  { keywords: ["wednesday", "addams", "wednesday addams"], style: "wednesday" },
+  { keywords: ["succession", "roy family"], style: "succession" },
+  { keywords: ["the office", "dunder mifflin", "mockumentary"], style: "the-office" },
+  { keywords: ["ozark", "byrde"], style: "ozark" },
+  { keywords: ["narcos", "escobar", "cartel"], style: "narcos" },
+  { keywords: ["euphoria", "rue"], style: "euphoria" },
+  { keywords: ["game of thrones", "got", "westeros"], style: "game-of-thrones" },
+  { keywords: ["vikings", "ragnar", "norse", "nórdico"], style: "vikings" },
+  { keywords: ["taxi driver", "de niro"], style: "taxi-driver" },
+  { keywords: ["pulp fiction", "tarantino"], style: "pulp-fiction" },
+  { keywords: ["blade runner", "cyberpunk 2077", "dystopia"], style: "blade-runner" },
+  { keywords: ["star wars", "jedi", "sith"], style: "star-wars" },
+  { keywords: ["matrix", "neo", "morpheus"], style: "matrix" },
+  { keywords: ["fight club", "tyler durden"], style: "fight-club" },
+];
+
+export function detectTitleStyle(visual: string, design?: string): TitleStyle {
+  const src = ((visual ?? "") + " " + (design ?? "")).toLowerCase();
+  for (const entry of TITLE_STYLE_MAP) {
+    if (entry.keywords.some((kw) => src.includes(kw))) return entry.style;
+  }
+  return "default";
+}
+
 // ─── BUILD PROMPT ─────────────────────────────────────────────
 export function buildPrompt(
   sl: SlideData,
@@ -130,7 +197,7 @@ export function buildPrompt(
   return { pos: parts, neg: NEG };
 }
 
-// ─── BUILD LAYOUT (accent only — position decided by Haiku) ───
+// ─── BUILD LAYOUT (accent only — position decided by AI) ──────
 export function buildLayout(light: LightKey): { accent: string } {
   const ACC: Record<LightKey, string> = {
     dramatic: "#00b4ff",

@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from "react";
 import type { ProcessedSlide, StyleKey, LightKey, FormatKey, ResKey } from "./parser";
 import { parseSlides } from "./parser";
-import { buildPrompt, buildLayout, visualHasPerson } from "./prompts";
+import { buildPrompt, buildLayout, visualHasPerson, detectTitleStyle } from "./prompts";
+import type { TitleStyle } from "./prompts";
 import { analyzeLayout, composeSlide } from "./compositor";
 import type { AILayout } from "./compositor";
 import { callGemini } from "./gemini";
@@ -11,9 +12,6 @@ interface CarouselState {
   faceB64: string;
   faceDataUrl: string;
   faceName: string;
-  layoutRefB64: string;
-  layoutRefDataUrl: string;
-  layoutRefName: string;
   style: StyleKey;
   light: LightKey;
   fmt: FormatKey;
@@ -24,7 +22,6 @@ interface CarouselState {
   varUrls: Record<string, string>;
   varStatuses: Record<string, "idle" | "generating" | "done" | "error">;
   slideStatuses: Record<number, "idle" | "processing" | "complete" | "error">;
-  slideSteps: Record<string, "" | "active" | "done" | "error">;
   isGenerating: boolean;
   progress: { done: number; total: number };
   generationComplete: boolean;
@@ -32,7 +29,6 @@ interface CarouselState {
 
 interface CarouselActions {
   setFace: (file: File) => void;
-  setLayoutRef: (file: File) => void;
   setStyle: (s: StyleKey) => void;
   setLight: (l: LightKey) => void;
   setFmt: (f: FormatKey) => void;
@@ -93,11 +89,12 @@ async function generateAndCompose(
   varIdx: number,
   faceB64: string,
   isFirstOrLast: boolean,
+  titleStyle: TitleStyle,
 ): Promise<{ blob: Blob; url: string }> {
   // 1. Gera imagem
   const imgSrc = await callGemini(sl, varIdx, faceB64);
 
-  // 2. Analisa layout com Haiku (se imagem gerada)
+  // 2. Analisa layout com Haiku (detecta focusZone → textZone + gradient)
   let aiLayout: AILayout | undefined;
   if (imgSrc) {
     try {
@@ -108,13 +105,13 @@ async function generateAndCompose(
       };
       const [sw, sh] = snapDims[sl.fmt] ?? [540, 675];
       const snap = await shrinkToBase64(imgSrc, sw, sh);
-      aiLayout = await analyzeLayout(snap, sl.titulo, sl.subtitulo ?? "", !!sl.cta, sl.fmt);
+      aiLayout = await analyzeLayout(snap, sl.titulo, sl.subtitulo ?? "", !!sl.cta, sl.fmt, titleStyle);
     } catch {
       /* usa DEFAULT_LAYOUT */
     }
   }
 
-  // 3. Compõe slide com posição IA + flag de logo
+  // 3. Compõe slide com layout IA
   const blob = await composeSlide(imgSrc, sl, faceB64, aiLayout, isFirstOrLast);
   const url = URL.createObjectURL(blob);
   return { blob, url };
@@ -122,12 +119,9 @@ async function generateAndCompose(
 
 // ─── PROVIDER ────────────────────────────────────────────────
 export function CarouselProvider({ children }: { children: React.ReactNode }) {
-  const [faceB64, setFaceB64] = useState("");
+  const [faceB64, setFaceB64State] = useState("");
   const [faceDataUrl, setFaceDataUrl] = useState("");
   const [faceName, setFaceName] = useState("");
-  const [layoutRefB64, setLayoutRefB64State] = useState("");
-  const [layoutRefDataUrl, setLayoutRefDataUrl] = useState("");
-  const [layoutRefName, setLayoutRefName] = useState("");
   const [style, setStyle] = useState<StyleKey>("cinematic");
   const [light, setLight] = useState<LightKey>("dramatic");
   const [fmt, setFmt] = useState<FormatKey>("4:5");
@@ -138,35 +132,21 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const [varUrls, setVarUrls] = useState<Record<string, string>>({});
   const [varStatuses, setVarStatuses] = useState<Record<string, "idle" | "generating" | "done" | "error">>({});
   const [slideStatuses, setSlideStatuses] = useState<Record<number, "idle" | "processing" | "complete" | "error">>({});
-  const [slideSteps, setSlideSteps] = useState<Record<string, "" | "active" | "done" | "error">>({});
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [generationComplete, setGenerationComplete] = useState(false);
 
-  const faceB64Ref = useRef(faceB64);
-  faceB64Ref.current = faceB64;
+  const faceB64Ref = useRef("");
 
   const setFace = useCallback((file: File) => {
     const r = new FileReader();
     r.onload = (e) => {
       const dataUrl = e.target?.result as string;
       const b64 = dataUrl.split(",")[1];
-      setFaceB64(b64);
+      setFaceB64State(b64);
       faceB64Ref.current = b64;
       setFaceDataUrl(dataUrl);
       setFaceName(file.name);
-    };
-    r.readAsDataURL(file);
-  }, []);
-
-  const setLayoutRef = useCallback((file: File) => {
-    const r = new FileReader();
-    r.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      const b64 = dataUrl.split(",")[1];
-      setLayoutRefB64State(b64);
-      setLayoutRefDataUrl(dataUrl);
-      setLayoutRefName(file.name);
     };
     r.readAsDataURL(file);
   }, []);
@@ -176,8 +156,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     setVarStatuses((p) => ({ ...p, [`${si}_${vi}`]: s }));
   const setSlideStatus = (i: number, s: "idle" | "processing" | "complete" | "error") =>
     setSlideStatuses((p) => ({ ...p, [i]: s }));
-  const setSlideStep = (i: number, step: number, s: "" | "active" | "done" | "error") =>
-    setSlideSteps((p) => ({ ...p, [`${i}_${step}`]: s }));
 
   const startGeneration = useCallback(async () => {
     if (!rawText.trim()) return;
@@ -200,6 +178,8 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
         style,
         light,
         res,
+        // titleStyle detectado no visual + design de cada slide
+        titleStyle: detectTitleStyle(s.visual ?? "", s.design),
       };
     });
 
@@ -208,7 +188,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     setVarUrls({});
     setVarStatuses({});
     setSlideStatuses({});
-    setSlideSteps({});
     setIsGenerating(true);
     setGenerationComplete(false);
     setProgress({ done: 0, total: totalSlides });
@@ -218,16 +197,15 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     for (let i = 0; i < processedSlides.length; i++) {
       setProgress({ done: i, total: totalSlides });
       setSlideStatus(i, "processing");
-      setSlideStep(i, 1, "active");
       newBlobs[i] = new Array(4).fill(null);
       [0, 1, 2, 3].forEach((v) => setVarStatus(i, v, "generating"));
 
-      // 1º slide (i===0) e último (i===totalSlides-1) recebem logo
       const isFirstOrLast = i === 0 || i === totalSlides - 1;
+      const titleStyle = (processedSlides[i] as any).titleStyle ?? "default";
 
       try {
         const varJobs = [0, 1, 2, 3].map((v) =>
-          generateAndCompose(processedSlides[i], v, faceB64Ref.current, isFirstOrLast)
+          generateAndCompose(processedSlides[i], v, faceB64Ref.current, isFirstOrLast, titleStyle)
             .then(({ blob, url }) => {
               newBlobs[i][v] = blob;
               setVarUrl(i, v, url);
@@ -237,13 +215,9 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
             .catch(() => setVarStatus(i, v, "error")),
         );
         await Promise.all(varJobs);
-        setSlideStep(i, 1, "done");
-        setSlideStep(i, 2, "done");
-        setSlideStep(i, 3, "done");
         setSlideStatus(i, "complete");
       } catch {
         setSlideStatus(i, "error");
-        setSlideStep(i, 1, "error");
         [0, 1, 2, 3].forEach((v) => setVarStatus(i, v, "error"));
       }
     }
@@ -257,11 +231,11 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     async (slideIdx: number, varIdx: number) => {
       const sl = slides[slideIdx];
       if (!sl) return;
-      // Determina se este slide é primeiro ou último
       const isFirstOrLast = slideIdx === 0 || slideIdx === slides.length - 1;
+      const titleStyle = (sl as any).titleStyle ?? "default";
       setVarStatus(slideIdx, varIdx, "generating");
       try {
-        const { blob, url } = await generateAndCompose(sl, varIdx, faceB64Ref.current, isFirstOrLast);
+        const { blob, url } = await generateAndCompose(sl, varIdx, faceB64Ref.current, isFirstOrLast, titleStyle);
         setVarUrl(slideIdx, varIdx, url);
         setVarStatus(slideIdx, varIdx, "done");
         setComposedBlobs((prev) => {
@@ -282,9 +256,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     faceB64,
     faceDataUrl,
     faceName,
-    layoutRefB64,
-    layoutRefDataUrl,
-    layoutRefName,
     style,
     light,
     fmt,
@@ -295,12 +266,10 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     varUrls,
     varStatuses,
     slideStatuses,
-    slideSteps,
     isGenerating,
     progress,
     generationComplete,
     setFace,
-    setLayoutRef,
     setStyle,
     setLight,
     setFmt,
