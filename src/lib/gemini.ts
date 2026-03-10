@@ -1,23 +1,6 @@
 import type { ProcessedSlide } from './parser';
 import { VAR_HINTS } from './prompts';
-
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries = 3
-): Promise<Response> {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const resp = await fetch(url, options);
-    if (resp.status === 429 && attempt < maxRetries) {
-      const retryAfter = Math.min(30, Math.pow(2, attempt + 1) * 5 + Math.random() * 5);
-      console.warn(`[Gemini] Rate limited, retrying in ${retryAfter.toFixed(1)}s (attempt ${attempt + 1}/${maxRetries})`);
-      await new Promise(r => setTimeout(r, retryAfter * 1000));
-      continue;
-    }
-    return resp;
-  }
-  throw new Error('Max retries exceeded');
-}
+import { supabase } from '@/integrations/supabase/client';
 
 export async function callGemini(
   sl: ProcessedSlide,
@@ -33,54 +16,39 @@ export async function callGemini(
 
   // Stagger requests to avoid hitting rate limits
   if (varIdx > 0) {
-    await new Promise(r => setTimeout(r, varIdx * 8000));
+    await new Promise(r => setTimeout(r, varIdx * 3000));
   }
-
-  const MODEL = 'gemini-3-pro-image-preview';
-  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-
-  const parts: any[] = [];
 
   const promptText = [
     sl.prompt.pos + VAR_HINTS[varIdx],
     '',
     'NEGATIVE — Strictly avoid the following in the generated image:',
     sl.prompt.neg,
-  ].join('\n');
+    '',
+    faceB64
+      ? '[FACE REFERENCE IMAGE is attached — use ONLY for facial identity extraction, NOT for scene composition]'
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
-  parts.push({ text: promptText });
-
-  if (faceB64) {
-    parts.push({ text: '[FACE REFERENCE IMAGE BELOW — use ONLY for facial identity extraction, NOT for scene composition]' });
-    parts.push({ inline_data: { mime_type: 'image/jpeg', data: faceB64 } });
-  }
-
-  const payload = {
-    contents: [{ parts }],
-    generationConfig: {
-      responseModalities: ['IMAGE', 'TEXT'],
+  const { data, error } = await supabase.functions.invoke('generate-image', {
+    body: {
+      prompt: promptText,
+      faceB64: faceB64 || undefined,
     },
-  };
-
-  const resp = await fetchWithRetry(ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(180000),
   });
 
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error?.message || 'HTTP ' + resp.status);
+  if (error) {
+    throw new Error(error.message || 'Edge function error');
   }
 
-  const data = await resp.json();
-  const respParts = data.candidates?.[0]?.content?.parts || [];
-  for (const part of respParts) {
-    if (part.inlineData?.data) {
-      return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
-    }
-    if (part.fileData?.fileUri) return part.fileData.fileUri;
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  if (data?.imageUrl) {
+    return data.imageUrl;
   }
 
   throw new Error('No image in API response.');
