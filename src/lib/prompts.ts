@@ -36,19 +36,6 @@ export const VAR_HINTS = [
 ];
 
 const PERSON_KEYWORDS = [
-  "pessoa", "homem", "mulher", "menino", "menina", "criança",
-  "executivo", "empresário", "empresária", "líder", "atleta",
-  "médico", "profissional", "founder", "ceo", "palestrante",
-  "especialista", "autor", "coach", "person", "man", "woman",
-  "boy", "girl", "human", "speaker", "expert",
-];
-
-function visualHasPerson(visual: string): boolean {
-  const v = visual.toLowerCase();
-  return PERSON_KEYWORDS.some((kw) => v.includes(kw));
-}
-
-const PERSON_KEYWORDS = [
   'pessoa', 'homem', 'mulher', 'menino', 'menina', 'criança',
   'executivo', 'empresário', 'empresária', 'líder', 'atleta',
   'médico', 'profissional', 'founder', 'ceo', 'palestrante',
@@ -70,7 +57,6 @@ export function buildPrompt(
 ) {
   const hasPerson = options?.useFaceRef ?? visualHasPerson(sl.visual ?? '');
 
-  // Só menciona a imagem de referência se o VISUAL citar uma pessoa
   const faceInstruction = hasPerson
     ? [
         'CRITICAL INSTRUCTION — FACE REFERENCE USAGE:',
@@ -80,22 +66,8 @@ export function buildPrompt(
         'GENERATE a completely new photograph of this same person FROM SCRATCH, naturally in the scene described below.',
         'The face must be unmistakably the same individual. Zero influence from the reference except facial identity.',
       ].join(' ')
-    : ''; // ← sem pessoa no VISUAL = referência completamente omitida do prompt
+    : '';
 
-  const pos = [
-    faceInstruction,
-    STYLES[style],
-    sl.visual,
-    LIGHTS[light],
-    sl.design || '',
-    COMPS[fmt],
-    'professional commercial photography quality, dramatic atmospheric depth, cinematic bokeh, sharp focus, high production value',
-  ].filter(Boolean).map(s => s.trim()).join('. ');
-
-  return { pos, neg: NEG };
-}
-
-  // Layout-aware composition instruction
   const layoutInstruction = buildLayoutCompositionHint(sl, fmt);
 
   const pos = [
@@ -153,12 +125,10 @@ function buildLayoutCompositionHint(sl: SlideData, fmt: FormatKey): string {
 }
 
 export function buildLayout(sl: SlideData, light: LightKey, fmt: FormatKey) {
-  // Cor de acento: lime-green é o padrão dominante do sistema visual (como nas refs)
-  // Outros modos mantêm sua cor, mas o green usa sempre #c8ff00
   const ACC: Record<LightKey, string> = {
     dramatic: '#00b4ff',
     warm:     '#f5c842',
-    green:    '#c8ff00',  // lime-green — cor dominante do sistema Britto*
+    green:    '#c8ff00',
     moody:    '#ffffff',
   };
   const DIM: Record<FormatKey, string> = {
@@ -169,7 +139,6 @@ export function buildLayout(sl: SlideData, light: LightKey, fmt: FormatKey) {
   const accent = ACC[light];
   const hasPerson = visualHasPerson(sl.visual ?? '');
 
-  // Zona de texto: slides com pessoa ficam na base; sem pessoa podem ocupar mais área
   const textZone = hasPerson
     ? 'Zona inferior: últimos 45% da altura — gradiente cobre essa área inteiramente'
     : 'Zona inferior: últimos 55% da altura — fundo escuro sólido/gradiente nessa área';
