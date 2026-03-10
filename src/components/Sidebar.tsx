@@ -1,5 +1,6 @@
 import { useCarousel } from '@/lib/carousel-store';
 import { FaceUpload } from './FaceUpload';
+import { LayoutRefUpload } from './LayoutRefUpload';
 import { ChipGroup } from './ChipGroup';
 import type { StyleKey, LightKey, FormatKey, ResKey } from '@/lib/parser';
 
