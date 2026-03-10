@@ -30,7 +30,7 @@ async function upscaleBlob(blob: Blob): Promise<Blob> {
     if (!startRes.ok) return blob;
     const pred = await startRes.json();
     for (let i = 0; i < 30; i++) {
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 2000));
       const poll = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, {
         headers: { Authorization: `Token ${import.meta.env.VITE_REPLICATE_API_TOKEN}` },
       });
@@ -79,7 +79,7 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
     const blob = getVarBlob(index, varIdx);
     if (!blob) return;
     const key = `${index}_${varIdx}`;
-    setEnhancing(p => ({ ...p, [key]: true }));
+    setEnhancing((p) => ({ ...p, [key]: true }));
     try {
       const enhanced = await upscaleBlob(blob);
       const a = document.createElement("a");
@@ -87,7 +87,7 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
       a.download = `slide-${String(slide.n).padStart(2, "0")}-v${varIdx + 1}-4K.png`;
       a.click();
     } finally {
-      setEnhancing(p => ({ ...p, [key]: false }));
+      setEnhancing((p) => ({ ...p, [key]: false }));
     }
   };
 
@@ -95,21 +95,23 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
     const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
     const folder = zip.folder(`carousel-sl${String(slide.n).padStart(2, "0")}`)!;
-    setEnhancing(p => ({ ...p, [`${index}_zip`]: true }));
+    setEnhancing((p) => ({ ...p, [`${index}_zip`]: true }));
     try {
-      await Promise.all([0, 1, 2, 3].map(async v => {
-        const blob = getVarBlob(index, v);
-        if (!blob) return;
-        const enhanced = await upscaleBlob(blob);
-        folder.file(`slide-${String(slide.n).padStart(2, "0")}-v${v + 1}-4K.png`, enhanced);
-      }));
+      await Promise.all(
+        [0, 1, 2, 3].map(async (v) => {
+          const blob = getVarBlob(index, v);
+          if (!blob) return;
+          const enhanced = await upscaleBlob(blob);
+          folder.file(`slide-${String(slide.n).padStart(2, "0")}-v${v + 1}-4K.png`, enhanced);
+        }),
+      );
       const zipBlob = await zip.generateAsync({ type: "blob" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(zipBlob);
       a.download = `carousel-slide-${String(slide.n).padStart(2, "0")}-4K.zip`;
       a.click();
     } finally {
-      setEnhancing(p => ({ ...p, [`${index}_zip`]: false }));
+      setEnhancing((p) => ({ ...p, [`${index}_zip`]: false }));
     }
   };
 
@@ -181,17 +183,7 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
             >
               VARIAÇÕES_GERADAS // {slide.num}
             </div>
-            </div>
 
-            {[0, 1, 2, 3].some(v => !!varUrls[`${index}_${v}`]) && (
-              <button
-                onClick={dlAllZip}
-                disabled={enhancing[`${index}_zip`]}
-                className="w-full mt-2 bg-transparent border border-primary/40 rounded-sm text-primary font-mono text-[9px] tracking-[1.5px] uppercase py-1.5 cursor-pointer transition-all duration-200 hover:bg-primary/[0.06] hover:border-primary hover:shadow-[0_0_12px_hsl(var(--primary)/0.15)] disabled:opacity-40"
-              >
-                {enhancing[`${index}_zip`] ? "↑ APLICANDO 4K UPSCALE..." : "▼ BAIXAR TODAS · ZIP · 4K"}
-              </button>
-          </div>
             <div className="grid grid-cols-4 gap-2 max-[1200px]:grid-cols-2">
               {[0, 1, 2, 3].map((v) => {
                 const key = `${index}_${v}`;
@@ -243,7 +235,7 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
                     </div>
                     {url && (
                       <div className="flex gap-0.5 p-1">
-                      <button
+                        <button
                           onClick={() => dlOne(v)}
                           disabled={enhancing[`${index}_${v}`]}
                           className="flex-1 bg-card border border-border rounded-sm text-muted-foreground font-mono text-[8px] tracking-[0.5px] py-1 cursor-pointer transition-all duration-200 text-center hover:bg-primary/[0.06] hover:border-primary hover:text-primary hover:shadow-[0_0_6px_hsl(var(--neon-dim)/0.07)] disabled:opacity-40"
@@ -257,13 +249,13 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
                           ↺ REGEN
                         </button>
                       </div>
-                 )}
+                    )}
                   </div>
                 );
               })}
             </div>
 
-            {[0, 1, 2, 3].some(v => !!varUrls[`${index}_${v}`]) && (
+            {[0, 1, 2, 3].some((v) => !!varUrls[`${index}_${v}`]) && (
               <button
                 onClick={dlAllZip}
                 disabled={enhancing[`${index}_zip`]}
@@ -321,7 +313,6 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
               text={slide.prompt.neg}
               textClass="text-[#7a3a3a]"
             />
-            {/* LAYOUT_DATA removido */}
           </div>
         </div>
       )}
