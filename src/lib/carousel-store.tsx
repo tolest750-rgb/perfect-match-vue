@@ -191,7 +191,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
       [0, 1, 2, 3].forEach((v) => setVarStatus(i, v, "generating"));
 
       try {
-        const imgJobs = [0, 1, 2, 3].map((v) => callGemini(processedSlides[i], v, faceB64Ref.current));
+        const imgJobs = [0, 1, 2, 3].map((v) => callGemini(processedSlides[i], v, faceB64Ref.current, layoutRefB64Ref.current));
         const results = await Promise.allSettled(imgJobs);
         setSlideStep(i, 1, "done");
         setSlideStep(i, 2, "active");
