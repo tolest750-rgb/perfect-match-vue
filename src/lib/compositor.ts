@@ -261,60 +261,95 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
 
       // ── 9. CTA — pílula premium com glow, highlight e sombra ────
       if (sl.cta) {
-        ty += CTA_GAP;
-        ctx.font = ctaFont;
+  ty += CTA_GAP;
+  ctx.font = ctaFont;
 
-        const ctaW = ctx.measureText(sl.cta).width + 60 * F;
-        const ctaH = 56 * F;
-        const cx = textX;
-        const cy = ty;
+  const ICON_W   = 32 * F;   // largura reservada para o ícone
+  const ICON_GAP = 12 * F;
+  const PAD_L    = 28 * F;
+  const PAD_R    = 20 * F;
 
-        // Sombra projetada colorida — efeito de luz da cena
-        ctx.save();
-        ctx.shadowColor = `rgba(${accentRgb},0.55)`;
-        ctx.shadowBlur = 36 * F;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 8 * F;
-        ctx.fillStyle = accent;
-        rrect(ctx, cx, cy, ctaW, ctaH, 28 * F);
-        ctx.fill();
-        ctx.restore();
+  const textMetrics = ctx.measureText(sl.cta);
+  const ctaW = PAD_L + textMetrics.width + ICON_GAP + ICON_W + PAD_R;
+  const ctaH = 58 * F;
+  const cx   = textX;
+  const cy   = ty;
 
-        // Fill limpo — garante cor viva sem borrão
-        ctx.fillStyle = accent;
-        rrect(ctx, cx, cy, ctaW, ctaH, 28 * F);
-        ctx.fill();
+  // Sombra projetada colorida
+  ctx.save();
+  ctx.shadowColor   = `rgba(${accentRgb},0.55)`;
+  ctx.shadowBlur    = 36 * F;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 8 * F;
+  ctx.fillStyle = accent;
+  rrect(ctx, cx, cy, ctaW, ctaH, 30 * F);
+  ctx.fill();
+  ctx.restore();
 
-        // Highlight de luz no topo — chanfro/reflexo premium
-        const hl = ctx.createLinearGradient(cx, cy, cx, cy + ctaH * 0.55);
-        hl.addColorStop(0, "rgba(255,255,255,0.30)");
-        hl.addColorStop(0.5, "rgba(255,255,255,0.08)");
-        hl.addColorStop(1, "rgba(255,255,255,0)");
-        ctx.fillStyle = hl;
-        rrect(ctx, cx, cy, ctaW, ctaH * 0.55, 28 * F);
-        ctx.fill();
+  // Fill limpo
+  ctx.fillStyle = accent;
+  rrect(ctx, cx, cy, ctaW, ctaH, 30 * F);
+  ctx.fill();
 
-        // Borda sutil — profundidade de material
-        ctx.save();
-        ctx.strokeStyle = `rgba(255,255,255,0.18)`;
-        ctx.lineWidth = 1.5 * F;
-        rrect(ctx, cx, cy, ctaW, ctaH, 28 * F);
-        ctx.stroke();
-        ctx.restore();
+  // Highlight chanfro
+  const hl = ctx.createLinearGradient(cx, cy, cx, cy + ctaH * 0.55);
+  hl.addColorStop(0,   "rgba(255,255,255,0.28)");
+  hl.addColorStop(0.5, "rgba(255,255,255,0.06)");
+  hl.addColorStop(1,   "rgba(255,255,255,0)");
+  ctx.fillStyle = hl;
+  rrect(ctx, cx, cy, ctaW, ctaH * 0.55, 30 * F);
+  ctx.fill();
 
-        // Texto do CTA
-        ctx.save();
-        ctx.font = ctaFont;
-        ctx.shadowColor = "rgba(0,0,0,0.35)";
-        ctx.shadowBlur = 6 * F;
-        ctx.shadowOffsetY = 1.5 * F;
-        ctx.fillStyle = "#000000";
-        ctx.textBaseline = "middle";
-        ctx.fillText(sl.cta, cx + 30 * F, cy + ctaH * 0.5);
-        ctx.textBaseline = "alphabetic";
-        ctx.restore();
-      }
-    };
+  // Borda sutil
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.18)";
+  ctx.lineWidth   = 1.5 * F;
+  rrect(ctx, cx, cy, ctaW, ctaH, 30 * F);
+  ctx.stroke();
+  ctx.restore();
+
+  // Texto do CTA
+  ctx.save();
+  ctx.font          = ctaFont;
+  ctx.shadowColor   = "rgba(0,0,0,0.30)";
+  ctx.shadowBlur    = 5 * F;
+  ctx.shadowOffsetY = 1 * F;
+  ctx.fillStyle     = "#000000";
+  ctx.textBaseline  = "middle";
+  ctx.fillText(sl.cta, cx + PAD_L, cy + ctaH * 0.5);
+  ctx.textBaseline  = "alphabetic";
+  ctx.restore();
+
+  // Ícone — círculo escuro semitransparente + seta →
+  const iconCX = cx + PAD_L + textMetrics.width + ICON_GAP + ICON_W * 0.5;
+  const iconCY = cy + ctaH * 0.5;
+  const iconR  = ICON_W * 0.42;
+
+  // Fundo do ícone
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.beginPath();
+  ctx.arc(iconCX, iconCY, iconR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Seta →  desenhada com linhas
+  ctx.save();
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth   = 2.2 * F;
+  ctx.lineCap     = "round";
+  ctx.lineJoin    = "round";
+  const aW = iconR * 0.55;  // metade do comprimento da seta
+  const aH = iconR * 0.45;  // altura das pontas
+  ctx.beginPath();
+  ctx.moveTo(iconCX - aW, iconCY);
+  ctx.lineTo(iconCX + aW, iconCY);
+  ctx.moveTo(iconCX + aW - aH * 0.8, iconCY - aH);
+  ctx.lineTo(iconCX + aW, iconCY);
+  ctx.lineTo(iconCX + aW - aH * 0.8, iconCY + aH);
+  ctx.stroke();
+  ctx.restore();
+}
 
     // ── Fallback: sem imagem da IA ─────────────────────────────────
     const drawFallback = () => {
@@ -362,7 +397,26 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
       img.onload = () => {
         ctx.drawImage(img, 0, 0, CW, CH);
         doText();
-        canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
+      
+        // Upscale 4K: renderiza num canvas 2x maior com ImageBitmap de alta qualidade
+        createImageBitmap(canvas, {
+          resizeWidth:   CW * 2,
+          resizeHeight:  CH * 2,
+          resizeQuality: "high",
+        }).then((bmp) => {
+          const up = document.createElement("canvas");
+          up.width  = CW * 2;
+          up.height = CH * 2;
+          const uc = up.getContext("2d")!;
+          uc.imageSmoothingEnabled  = true;
+          uc.imageSmoothingQuality  = "high";
+          uc.drawImage(bmp, 0, 0);
+          bmp.close();
+          up.toBlob((b) => resolve(b!), "image/png", 1.0);
+        }).catch(() => {
+          // fallback sem upscale se o browser não suportar
+          canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
+        });
       };
       img.onerror = () => drawFallback();
       img.src = imgSrc;
