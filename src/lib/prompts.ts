@@ -247,32 +247,7 @@ export function buildPrompt(
   return { pos, neg: NEG };
 }
 
-function buildTextElementsHint(sl: SlideData, pos: LayoutPosition): string {
-  const textElements: string[] = [];
-  if (sl.titulo) textElements.push(`a large bold title`);
-  if (sl.subtitulo) textElements.push("a subtitle paragraph");
-  if (sl.cta) textElements.push("a call-to-action button");
-  
-  if (!textElements.length) return "";
-
-  const zoneMap: Record<LayoutPosition, string> = {
-    'bottom-left': "the bottom-left 45% of the frame",
-    'bottom-center': "the bottom 40% of the frame, centered",
-    'right': "the right 45% of the frame, vertically centered",
-    'left': "the left 45% of the frame, vertically centered",
-    'top-center': "the top 40% of the frame, centered",
-    'center': "the center of the frame",
-    'split-bottom': "the bottom 45% of the frame in two columns",
-  };
-
-  return [
-    `The following text elements will be composited over the image: ${textElements.join(", ")}.`,
-    `These elements will be placed in ${zoneMap[pos]}.`,
-    `That zone MUST be kept clean — use only smooth dark gradients or deep shadows there.`,
-    "Do NOT place the subject's body, important props, or scene details in this text zone.",
-    "Think of it as a photographer composing the shot to leave space for a magazine text overlay.",
-  ].join("\n");
-}
+// buildTextElementsHint removed — layout reference image now handles text zone guidance
 
 // ─── BUILD LAYOUT (for the compositor) ────────────────────────
 export function buildLayout(sl: SlideData, light: LightKey, fmt: FormatKey, layoutPos: LayoutPosition) {
