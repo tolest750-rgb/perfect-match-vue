@@ -55,6 +55,29 @@ const PERSON_KEYWORDS = [
 const visualMentionsPerson = (visual: string) =>
   PERSON_KEYWORDS.some((kw) => visual.toLowerCase().includes(kw));
 
+/**
+ * Detects if the VISUAL field mentions a specific named person/character
+ * (proper nouns like "Elon Musk", "Steve Jobs", "Batman").
+ * When a proper name is found, the face reference should NOT be used —
+ * the AI model will generate the named person's likeness directly.
+ */
+const visualMentionsNamedPerson = (visual: string): boolean => {
+  // Match capitalized words that look like proper names (2+ consecutive capitalized words)
+  const properNamePattern = /\b[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+)+\b/g;
+  const matches = visual.match(properNamePattern) || [];
+  
+  // Filter out common Portuguese phrases that start with capitals (beginning of sentences)
+  const commonPhrases = [
+    'call to action', 'no slide', 'na cena', 'do slide', 'em pé', 'de frente',
+    'ao fundo', 'na mesa', 'com fundo', 'olhando para',
+  ];
+  
+  return matches.some(m => {
+    const lower = m.toLowerCase();
+    return !commonPhrases.some(cp => lower.includes(cp));
+  });
+};
+
 export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const [faceB64, setFaceB64] = useState("");
   const [faceDataUrl, setFaceDataUrl] = useState("");
