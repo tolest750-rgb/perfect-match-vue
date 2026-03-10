@@ -1,6 +1,24 @@
 import type { ProcessedSlide } from './parser';
 import { VAR_HINTS } from './prompts';
 
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3
+): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const resp = await fetch(url, options);
+    if (resp.status === 429 && attempt < maxRetries) {
+      const retryAfter = Math.min(30, Math.pow(2, attempt + 1) * 5 + Math.random() * 5);
+      console.warn(`[Gemini] Rate limited, retrying in ${retryAfter.toFixed(1)}s (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise(r => setTimeout(r, retryAfter * 1000));
+      continue;
+    }
+    return resp;
+  }
+  throw new Error('Max retries exceeded');
+}
+
 export async function callGemini(
   sl: ProcessedSlide,
   varIdx: number,
@@ -13,12 +31,16 @@ export async function callGemini(
     return null;
   }
 
+  // Stagger requests to avoid hitting rate limits
+  if (varIdx > 0) {
+    await new Promise(r => setTimeout(r, varIdx * 8000));
+  }
+
   const MODEL = 'gemini-3-pro-image-preview';
   const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
   const parts: any[] = [];
 
-  // Face reference goes AFTER the text instruction so the model treats it as supplementary
   const promptText = [
     sl.prompt.pos + VAR_HINTS[varIdx],
     '',
@@ -26,10 +48,8 @@ export async function callGemini(
     sl.prompt.neg,
   ].join('\n');
 
-  // Text instruction FIRST so the model prioritizes it
   parts.push({ text: promptText });
 
-  // Face image AFTER text — labeled clearly as reference-only
   if (faceB64) {
     parts.push({ text: '[FACE REFERENCE IMAGE BELOW — use ONLY for facial identity extraction, NOT for scene composition]' });
     parts.push({ inline_data: { mime_type: 'image/jpeg', data: faceB64 } });
@@ -42,11 +62,11 @@ export async function callGemini(
     },
   };
 
-  const resp = await fetch(ENDPOINT, {
+  const resp = await fetchWithRetry(ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(150000),
+    signal: AbortSignal.timeout(180000),
   });
 
   if (!resp.ok) {
