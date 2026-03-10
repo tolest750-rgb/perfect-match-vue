@@ -2,6 +2,23 @@ import type { ProcessedSlide } from './parser';
 import { VAR_HINTS } from './prompts';
 import { supabase } from '@/integrations/supabase/client';
 
+// Cache the layout reference base64 so we only load it once
+let layoutRefB64Cache: string | null = null;
+
+async function getLayoutRefB64(): Promise<string> {
+  if (layoutRefB64Cache) return layoutRefB64Cache;
+
+  const res = await fetch(new URL('../assets/layout-reference.png', import.meta.url).href);
+  const buf = await res.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  layoutRefB64Cache = btoa(binary);
+  return layoutRefB64Cache;
+}
+
 export async function callGemini(
   sl: ProcessedSlide,
   varIdx: number,
@@ -12,15 +29,13 @@ export async function callGemini(
     await new Promise(r => setTimeout(r, varIdx * 3000));
   }
 
+  const layoutRefB64 = await getLayoutRefB64();
+
   const promptText = [
     sl.prompt.pos + VAR_HINTS[varIdx],
     '',
     'NEGATIVE — Strictly avoid the following in the generated image:',
     sl.prompt.neg,
-    '',
-    faceB64
-      ? '[FACE REFERENCE IMAGE is attached — use ONLY for facial identity extraction, NOT for scene composition]'
-      : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -29,6 +44,7 @@ export async function callGemini(
     body: {
       prompt: promptText,
       faceB64: faceB64 || undefined,
+      layoutRefB64,
     },
   });
 

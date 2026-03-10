@@ -17,7 +17,7 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const { prompt, faceB64 } = await req.json();
+    const { prompt, faceB64, layoutRefB64 } = await req.json();
 
     if (!prompt) {
       return new Response(
@@ -29,6 +29,15 @@ serve(async (req) => {
     // Build messages for the Lovable AI Gateway
     const content: any[] = [{ type: "text", text: prompt }];
 
+    // Always attach layout reference image first (composition guide)
+    if (layoutRefB64) {
+      content.push({
+        type: "image_url",
+        image_url: { url: `data:image/png;base64,${layoutRefB64}` },
+      });
+    }
+
+    // Then attach face reference if provided
     if (faceB64) {
       content.push({
         type: "image_url",
@@ -36,7 +45,7 @@ serve(async (req) => {
       });
     }
 
-    console.log("[generate-image] Calling Lovable AI Gateway with Nano Banana Pro...");
+    console.log("[generate-image] Calling Lovable AI Gateway with layout ref + face:", !!layoutRefB64, !!faceB64);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -87,7 +96,6 @@ serve(async (req) => {
       }
     }
 
-    // Check for inline content as fallback
     const textContent = data.choices?.[0]?.message?.content;
     console.log("[generate-image] No image found in response. Text:", textContent?.substring(0, 200));
 
