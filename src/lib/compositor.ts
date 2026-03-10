@@ -136,8 +136,6 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
 
     ctx.fillStyle = ov;
     ctx.fillRect(0, 0, CW, CH);
-    ctx.fillStyle = ov;
-    ctx.fillRect(0, 0, CW, CH);
 
 // Camada de cor ambiente — accent contamina o gradiente escuro
 const accentRgb = hexToRgb(accent);
