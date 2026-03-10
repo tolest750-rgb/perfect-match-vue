@@ -16,17 +16,16 @@ export async function callGemini(
   const MODEL = 'gemini-3-pro-image-preview';
   const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
+  const parts: any[] = [];
+  if (faceB64) {
+    parts.push({ inline_data: { mime_type: 'image/jpeg', data: faceB64 } });
+  }
+  parts.push({ text: sl.prompt.pos + VAR_HINTS[varIdx] + (sl.prompt.neg ? `\n\nAvoid: ${sl.prompt.neg}` : '') });
+
   const payload = {
-    contents: [{
-      parts: [
-        { inline_data: { mime_type: 'image/jpeg', data: faceB64 } },
-        { text: sl.prompt.pos + VAR_HINTS[varIdx] },
-      ]
-    }],
+    contents: [{ parts }],
     generationConfig: {
-      responseModalities: ['IMAGE'],
-      imageConfig: { aspectRatio: sl.fmt, resolution: sl.res, numberOfImages: 1 },
-      negativePrompt: sl.prompt.neg,
+      responseModalities: ['IMAGE', 'TEXT'],
     },
   };
 
