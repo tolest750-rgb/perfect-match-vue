@@ -95,9 +95,14 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
 
   // ── Tipografia — tamanhos maiores e proporcionais ──────────────
   const NUM_SIZE = Math.round(14 * F);
-  const TTL_SIZE = Math.round(96 * F); // +9% vs original
-  const SUB_SIZE = Math.round(26 * F); // +44% vs original — subtítulo legível
-  const CTA_SIZE = Math.round(18 * F); // +50% vs original
+  const TTL_SIZE = Math.round(96 * F);
+  const SUB_SIZE = Math.round(34 * F); // +30% — legível a distância
+  const CTA_SIZE = Math.round(20 * F);
+
+  const numFont = `700 ${NUM_SIZE}px 'Bricolage Grotesque', sans-serif`;
+  const tFont = `800 ${TTL_SIZE}px 'Bricolage Grotesque', sans-serif`; // bold sem ser ultra-pesado
+  const sFont = `400 ${SUB_SIZE}px 'Bricolage Grotesque', sans-serif`; // regular
+  const ctaFont = `700 ${CTA_SIZE}px 'Bricolage Grotesque', sans-serif`;
 
   const numFont = `700 ${NUM_SIZE}px 'Bricolage Grotesque', sans-serif`;
   const tFont = `900 ${TTL_SIZE}px 'Bricolage Grotesque', sans-serif`;
