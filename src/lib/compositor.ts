@@ -40,7 +40,6 @@ const DIM: Record<string, [number, number]> = {
   "1:1": [1080, 1080],
 };
 
-// Cor de acento base por tema
 const ACC: Record<LightKey, string> = {
   dramatic: "#00b4ff",
   warm: "#f5c842",
@@ -48,7 +47,7 @@ const ACC: Record<LightKey, string> = {
   moody: "#e0e0ff",
 };
 
-// Carrega a fonte Bricolage Grotesque do Google Fonts uma única vez
+// Carrega Bricolage Grotesque uma única vez
 let fontLoaded = false;
 async function ensureFont() {
   if (fontLoaded) return;
@@ -67,7 +66,6 @@ async function ensureFont() {
 }
 
 export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, faceB64: string): Promise<Blob> {
-  // Garante que a fonte está carregada antes de desenhar
   await ensureFont();
 
   const [W, H] = DIM[sl.fmt] || [1080, 1350];
@@ -87,16 +85,15 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
   const PAD_X = Math.round(CW * 0.07);
   const PAD_Y = Math.round(CH * 0.06);
 
-  // Acento do slide — vem do layout object ou fallback pelo light
   const layoutObj = sl.layout as any;
   const accent: string = layoutObj?.accent ?? ACC[sl.light as LightKey] ?? "#c8ff00";
   const layoutPos: LayoutPosition = layoutObj?.layoutPos ?? "bottom-left";
 
-  // ── Tamanhos de fonte ────────────────────────────────────────
+  // ── Tipografia ──────────────────────────────────────────────
   const NUM_SIZE = Math.round(13 * F);
-  const TTL_SIZE = Math.round(52 * F); // maior — mais próximo da referência
-  const SUB_SIZE = Math.round(19 * F);
-  const CTA_SIZE = Math.round(13 * F);
+  const TTL_SIZE = Math.round(88 * F);
+  const SUB_SIZE = Math.round(18 * F);
+  const CTA_SIZE = Math.round(12 * F);
 
   const numFont = `700 ${NUM_SIZE}px 'Bricolage Grotesque', sans-serif`;
   const tFont = `900 ${TTL_SIZE}px 'Bricolage Grotesque', sans-serif`;
@@ -108,21 +105,18 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
       // ── Gradiente de legibilidade adaptado ao layoutPos ──────
       let ov: CanvasGradient;
       if (layoutPos === "right") {
-        // Escurece da direita para o centro
         ov = ctx.createLinearGradient(CW * 0.42, 0, CW, 0);
         ov.addColorStop(0, "rgba(0,0,0,0)");
         ov.addColorStop(0.25, "rgba(0,0,0,0.50)");
         ov.addColorStop(0.65, "rgba(0,0,0,0.88)");
         ov.addColorStop(1, "rgba(0,0,0,0.97)");
       } else if (layoutPos === "left") {
-        // Escurece da esquerda para o centro
         ov = ctx.createLinearGradient(CW * 0.58, 0, 0, 0);
         ov.addColorStop(0, "rgba(0,0,0,0)");
         ov.addColorStop(0.25, "rgba(0,0,0,0.50)");
         ov.addColorStop(0.65, "rgba(0,0,0,0.88)");
         ov.addColorStop(1, "rgba(0,0,0,0.97)");
       } else if (layoutPos === "top-center") {
-        // Escurece do topo para baixo
         ov = ctx.createLinearGradient(0, 0, 0, CH * 0.52);
         ov.addColorStop(0, "rgba(0,0,0,0.97)");
         ov.addColorStop(0.45, "rgba(0,0,0,0.60)");
@@ -138,23 +132,20 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
       ctx.fillStyle = ov;
       ctx.fillRect(0, 0, CW, CH);
 
-      // ── Zona e largura do texto ──────────────────────────────
+      // ── Zona e largura do bloco de texto ────────────────────
       const isHorizontal = layoutPos === "right" || layoutPos === "left";
       const textW = isHorizontal ? CW * 0.46 - PAD_X : CW - PAD_X * 2;
-      const textX =
-        layoutPos === "right"
-          ? CW * 0.54 // começa em 54% da largura
-          : PAD_X; // esquerda padrão
+      const textX = layoutPos === "right" ? CW * 0.54 : PAD_X;
 
       // ── Medir linhas ─────────────────────────────────────────
       const tLines = wrapTxt(ctx, sl.titulo, tFont, textW, 3);
       const sLines = sl.subtitulo ? wrapTxt(ctx, sl.subtitulo, sFont, textW, 4) : [];
 
-      const tLH = TTL_SIZE * F * 1.08;
+      const tLH = TTL_SIZE * F * 0.98; // linhas coladas, igual à referência
       const sLH = SUB_SIZE * F * 1.55;
-      const GAP_TS = 18 * F;
-      const GAP_SC = 22 * F;
-      const CTA_H = sl.cta ? 44 * F : 0;
+      const GAP_TS = 24 * F;
+      const GAP_SC = 20 * F;
+      const CTA_H = sl.cta ? 38 * F : 0;
       const CTA_GAP = sl.cta ? GAP_SC : 0;
 
       const BLOCK_H =
@@ -165,66 +156,55 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
       if (layoutPos === "top-center") {
         ty = PAD_Y * 2;
       } else if (isHorizontal) {
-        ty = (CH - BLOCK_H) / 2; // centraliza verticalmente
+        ty = CH * 0.32; // começa em 32% — igual à referência
       } else {
         ty = CH - PAD_Y - BLOCK_H; // ancora no fundo
       }
 
-      // ── Número do slide — sempre topo esquerdo ───────────────
+      // ── Número do slide — topo esquerdo ─────────────────────
       ctx.font = numFont;
       ctx.fillStyle = "rgba(255,255,255,0.38)";
       ctx.textBaseline = "top";
       ctx.fillText(sl.num, PAD_X, PAD_Y);
       ctx.textBaseline = "alphabetic";
 
-      // ── Título com gradiente branco → accent ─────────────────
-      // Cria gradiente vertical que vai do branco (topo) ao accent (base)
-      const titleBlockH = tLines.length * tLH;
-      const titleGrad = ctx.createLinearGradient(0, ty - tLH, 0, ty + titleBlockH);
-      titleGrad.addColorStop(0, "#ffffff"); // topo: branco puro
-      titleGrad.addColorStop(0.5, "#ffffff"); // meio ainda branco
-      titleGrad.addColorStop(1, accent); // base: cor de acento (lime, blue, gold…)
+      // ── Título: branco em todas as linhas, EXCETO a última ──
+      // Última linha recebe a cor de acento (lime, blue, gold…)
       ctx.font = tFont;
-      ctx.fillStyle = titleGrad;
-      tLines.forEach((ln) => {
+      tLines.forEach((ln, idx) => {
+        ctx.fillStyle = idx === tLines.length - 1 ? accent : "#ffffff";
         ctx.fillText(ln, textX, ty);
         ty += tLH;
       });
 
-      // ── Subtítulo — branco puro ──────────────────────────────
+      // ── Subtítulo — branco suave ─────────────────────────────
       if (sLines.length) {
         ty += GAP_TS;
         ctx.font = sFont;
-        ctx.fillStyle = "#ffffff";
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
         sLines.forEach((ln) => {
           ctx.fillText(ln, textX, ty);
           ty += sLH;
         });
       }
 
-      // ── CTA — pílula com mesmo gradiente do título ───────────
+      // ── CTA — pílula sólida accent, texto preto ──────────────
       if (sl.cta) {
         ty += CTA_GAP;
         ctx.font = ctaFont;
-        const ctaW = ctx.measureText(sl.cta).width + 48 * F;
-        const ctaH = 44 * F;
+        const ctaW = ctx.measureText(sl.cta).width + 40 * F;
+        const ctaH = 38 * F;
         const cx = textX;
         const cy = ty - ctaH * 0.82;
-
-        // Gradiente horizontal branco → accent no botão
-        const ctaGrad = ctx.createLinearGradient(cx, 0, cx + ctaW, 0);
-        ctaGrad.addColorStop(0, "#ffffff");
-        ctaGrad.addColorStop(1, accent);
-        ctx.fillStyle = ctaGrad;
-        rrect(ctx, cx, cy, ctaW, ctaH, 10 * F);
+        ctx.fillStyle = accent; // sólido, sem gradiente
+        rrect(ctx, cx, cy, ctaW, ctaH, 22 * F);
         ctx.fill();
-
         ctx.fillStyle = "#000000";
-        ctx.fillText(sl.cta, cx + 24 * F, cy + ctaH * 0.65);
+        ctx.fillText(sl.cta, cx + 20 * F, cy + ctaH * 0.65);
       }
     };
 
-    // ── Fallback sem imagem da IA ────────────────────────────────
+    // ── Fallback: sem imagem da IA ───────────────────────────────
     const drawFallback = () => {
       const GC: Record<string, [string, string]> = {
         dramatic: ["#030318", "#06103a"],
