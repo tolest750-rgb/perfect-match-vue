@@ -40,7 +40,7 @@ export function OutputPanel({ onImageClick }: OutputPanelProps) {
 
   const cpAll = () => {
     const text = slides.map(s =>
-      `=== SLIDE ${s.num} ===\nPOSITIVE:\n${s.prompt.pos}\n\nNEGATIVE:\n${s.prompt.neg}\n\nLAYOUT:\n${s.layout}`
+      `=== SLIDE ${s.num} ===\nPOSITIVE:\n${s.prompt.pos}\n\nNEGATIVE:\n${s.prompt.neg}\n\nLAYOUT:\n${JSON.stringify(s.layout, null, 2)}`
     ).join('\n\n' + '═'.repeat(48) + '\n\n');
     navigator.clipboard.writeText(text);
   };
