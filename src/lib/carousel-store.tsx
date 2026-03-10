@@ -4,6 +4,7 @@ import { parseSlides } from "./parser";
 import { buildPrompt, buildLayout } from "./prompts";
 import { callGemini } from "./gemini";
 import { composeSlide } from "./compositor";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CarouselState {
   faceB64: string;
