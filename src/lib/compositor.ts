@@ -80,6 +80,111 @@ async function ensureFont() {
   }
 }
 
+interface AILayout {
+  titleX: number; // 0-1 relativo à largura
+  titleY: number; // 0-1 relativo à altura
+  titleAlign: "left" | "center" | "right";
+  titleMaxWidthRatio: number; // 0-1 — fração da largura disponível
+  subtitleX: number;
+  subtitleY: number;
+  subtitleAlign: "left" | "center" | "right";
+  subtitleMaxWidthRatio: number;
+  ctaX: number;
+  ctaY: number;
+  gradientType: "bottom" | "top" | "left" | "right" | "radial-center";
+  gradientStart: number; // 0-1 — onde o gradiente começa
+  gradientMaxOpacity: number; // 0-0.95
+}
+
+async function analyzeLayout(
+  imageBase64: string,
+  titulo: string,
+  subtitulo: string,
+  hasCta: boolean,
+  fmt: string,
+): Promise<AILayout> {
+  const defaultLayout: AILayout = {
+    titleX: 0.07,
+    titleY: 0.72,
+    titleAlign: "left",
+    titleMaxWidthRatio: 0.86,
+    subtitleX: 0.07,
+    subtitleY: 0.83,
+    subtitleAlign: "left",
+    subtitleMaxWidthRatio: 0.86,
+    ctaX: 0.07,
+    ctaY: 0.91,
+    gradientType: "bottom",
+    gradientStart: 0.38,
+    gradientMaxOpacity: 0.88,
+  };
+
+  try {
+    const systemPrompt = `You are a world-class editorial art director specializing in cinematic social media layouts.
+You analyze an image and decide the optimal position for text overlay elements following these principles:
+- Visual hierarchy: title dominates, subtitle supports, CTA closes
+- Text must land on naturally dark or blurred zones — never over a bright face or busy scene detail
+- Composition must feel like a magazine cover or movie poster
+- Prefer asymmetric, cinematic placements over centered layouts unless the image demands it
+- The gradient should be as subtle as possible while still ensuring legibility
+
+Respond ONLY with a valid JSON object. No explanation, no markdown, no backticks.`;
+
+    const userPrompt = `Analyze this ${fmt} image and decide the best text layout.
+
+Title text: "${titulo}"
+Subtitle text: "${subtitulo}"
+Has CTA button: ${hasCta}
+
+Return this exact JSON structure with your decisions:
+{
+  "titleX": <0-1 horizontal position as fraction of width>,
+  "titleY": <0-1 vertical position as fraction of height — this is the baseline of the first title line>,
+  "titleAlign": <"left" | "center" | "right">,
+  "titleMaxWidthRatio": <0.4-0.92 fraction of total width available for title block>,
+  "subtitleX": <0-1>,
+  "subtitleY": <0-1>,
+  "subtitleAlign": <"left" | "center" | "right">,
+  "subtitleMaxWidthRatio": <0.4-0.92>,
+  "ctaX": <0-1>,
+  "ctaY": <0-1>,
+  "gradientType": <"bottom" | "top" | "left" | "right" | "radial-center">,
+  "gradientStart": <0-1 where gradient begins fading in>,
+  "gradientMaxOpacity": <0.55-0.92 maximum opacity of the dark overlay>
+}`;
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 512,
+        system: systemPrompt,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: "image/png", data: imageBase64 },
+              },
+              { type: "text", text: userPrompt },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const data = await response.json();
+    const raw = data.content?.map((c: any) => c.text || "").join("") ?? "";
+    const clean = raw.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(clean) as AILayout;
+    return { ...defaultLayout, ...parsed };
+  } catch {
+    return defaultLayout;
+  }
+}
+
 export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, faceB64: string): Promise<Blob> {
   await ensureFont();
 
@@ -101,8 +206,9 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
 
   const layoutObj = sl.layout as any;
   const accent: string = layoutObj?.accent ?? ACC[sl.light as LightKey] ?? "#c8ff00";
-  const layoutPos: LayoutPosition = layoutObj?.layoutPos ?? "bottom-left";
   const accentRgb = hexToRgb(accent) ?? "200,255,0";
+  // aiLayout será preenchido depois que a imagem for carregada
+  let aiLayout: AILayout | null = null;
 
   // ── Tipografia ────────────────────────────────────────────────
   const NUM_SIZE = Math.round(14 * F);
@@ -122,82 +228,55 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
     };
 
     const doText = () => {
-      // ── 1. GRADIENTE DE LEGIBILIDADE — suave, foto respira ──────
+      const L = aiLayout!;
+      const [imgW, imgH] = [CW, CH];
+
+      // ── 1. GRADIENTE — direção e intensidade decididos pela IA ──────
       let ov: CanvasGradient;
-      if (layoutPos === "right") {
-        ov = ctx.createLinearGradient(CW * 0.38, 0, CW, 0);
-        ov.addColorStop(0, "rgba(0,0,0,0)");
-        ov.addColorStop(0.18, "rgba(0,0,0,0.30)");
-        ov.addColorStop(0.55, "rgba(0,0,0,0.72)");
-        ov.addColorStop(1, "rgba(0,0,0,0.88)");
-      } else if (layoutPos === "left") {
-        ov = ctx.createLinearGradient(CW * 0.62, 0, 0, 0);
-        ov.addColorStop(0, "rgba(0,0,0,0)");
-        ov.addColorStop(0.18, "rgba(0,0,0,0.30)");
-        ov.addColorStop(0.55, "rgba(0,0,0,0.72)");
-        ov.addColorStop(1, "rgba(0,0,0,0.88)");
-      } else if (layoutPos === "top-center") {
-        ov = ctx.createLinearGradient(0, 0, 0, CH * 0.5);
-        ov.addColorStop(0, "rgba(0,0,0,0.90)");
-        ov.addColorStop(0.4, "rgba(0,0,0,0.50)");
-        ov.addColorStop(1, "rgba(0,0,0,0)");
-      } else {
-        ov = ctx.createLinearGradient(0, CH * 0.38, 0, CH);
-        ov.addColorStop(0, "rgba(0,0,0,0)");
-        ov.addColorStop(0.28, "rgba(0,0,0,0.32)");
-        ov.addColorStop(0.58, "rgba(0,0,0,0.68)");
-        ov.addColorStop(1, "rgba(0,0,0,0.88)");
+      switch (L.gradientType) {
+        case "top":
+          ov = ctx.createLinearGradient(0, 0, 0, imgH * (1 - L.gradientStart));
+          ov.addColorStop(0, `rgba(0,0,0,${L.gradientMaxOpacity})`);
+          ov.addColorStop(1, "rgba(0,0,0,0)");
+          break;
+        case "left":
+          ov = ctx.createLinearGradient(0, 0, imgW * (1 - L.gradientStart), 0);
+          ov.addColorStop(0, `rgba(0,0,0,${L.gradientMaxOpacity})`);
+          ov.addColorStop(1, "rgba(0,0,0,0)");
+          break;
+        case "right":
+          ov = ctx.createLinearGradient(imgW, 0, imgW * L.gradientStart, 0);
+          ov.addColorStop(0, `rgba(0,0,0,${L.gradientMaxOpacity})`);
+          ov.addColorStop(1, "rgba(0,0,0,0)");
+          break;
+        case "radial-center":
+          ov = ctx.createRadialGradient(imgW / 2, imgH / 2, imgH * 0.1, imgW / 2, imgH / 2, imgH * 0.7);
+          ov.addColorStop(0, "rgba(0,0,0,0)");
+          ov.addColorStop(1, `rgba(0,0,0,${L.gradientMaxOpacity})`);
+          break;
+        default: // bottom
+          ov = ctx.createLinearGradient(0, imgH * L.gradientStart, 0, imgH);
+          ov.addColorStop(0, "rgba(0,0,0,0)");
+          ov.addColorStop(0.3, `rgba(0,0,0,${L.gradientMaxOpacity * 0.4})`);
+          ov.addColorStop(0.65, `rgba(0,0,0,${L.gradientMaxOpacity * 0.78})`);
+          ov.addColorStop(1, `rgba(0,0,0,${L.gradientMaxOpacity})`);
       }
       ctx.fillStyle = ov;
-      ctx.fillRect(0, 0, CW, CH);
+      ctx.fillRect(0, 0, imgW, imgH);
 
-      // ── 2. COR AMBIENTE — accent contamina as sombras ────────────
-      let accentOv: CanvasGradient;
-      if (layoutPos === "right") {
-        accentOv = ctx.createLinearGradient(CW * 0.55, 0, CW, 0);
-      } else if (layoutPos === "left") {
-        accentOv = ctx.createLinearGradient(CW * 0.45, 0, 0, 0);
-      } else if (layoutPos === "top-center") {
-        accentOv = ctx.createLinearGradient(0, 0, 0, CH * 0.42);
-      } else {
-        accentOv = ctx.createLinearGradient(0, CH * 0.5, 0, CH);
-      }
-      accentOv.addColorStop(0, `rgba(${accentRgb},0)`);
-      accentOv.addColorStop(0.55, `rgba(${accentRgb},0.05)`);
-      accentOv.addColorStop(1, `rgba(${accentRgb},0.12)`);
-      ctx.fillStyle = accentOv;
-      ctx.fillRect(0, 0, CW, CH);
+      // ── 2. COR AMBIENTE ──────────────────────────────────────────────
+      const ambOv = ctx.createLinearGradient(0, imgH * (L.gradientStart + 0.1), 0, imgH);
+      ambOv.addColorStop(0, `rgba(${accentRgb},0)`);
+      ambOv.addColorStop(0.6, `rgba(${accentRgb},0.05)`);
+      ambOv.addColorStop(1, `rgba(${accentRgb},0.12)`);
+      ctx.fillStyle = ambOv;
+      ctx.fillRect(0, 0, imgW, imgH);
 
-      // ── 3. ZONA DE TEXTO ─────────────────────────────────────────
-      const isHorizontal = layoutPos === "right" || layoutPos === "left";
-      const textW = isHorizontal ? CW * 0.46 - PAD_X : CW - PAD_X * 2;
-      const textX = layoutPos === "right" ? CW * 0.54 : PAD_X;
+      // ── 3. HELPERS DE POSIÇÃO ────────────────────────────────────────
+      const tx = (ratio: number) => ratio * imgW;
+      const ty = (ratio: number) => ratio * imgH;
 
-      // ── 4. MEDIR LINHAS ──────────────────────────────────────────
-      const tLines = wrapTxt(ctx, sl.titulo, tFont, textW, 3);
-      const sLines = sl.subtitulo ? wrapTxt(ctx, sl.subtitulo, sFont, textW, 3) : [];
-
-      const tLH = TTL_SIZE * F * 0.96;
-      const sLH = SUB_SIZE * F * 1.5;
-      const GAP_TS = 32 * F;
-      const GAP_SC = 28 * F;
-      const CTA_H = sl.cta ? 58 * F : 0;
-      const CTA_GAP = sl.cta ? GAP_SC : 0;
-
-      const BLOCK_H =
-        tLines.length * tLH + (sLines.length ? GAP_TS + sLines.length * sLH : 0) + (sl.cta ? CTA_GAP + CTA_H : 0);
-
-      // ── 5. Y INICIAL ─────────────────────────────────────────────
-      let ty: number;
-      if (layoutPos === "top-center") {
-        ty = PAD_Y * 2;
-      } else if (isHorizontal) {
-        ty = CH * 0.3;
-      } else {
-        ty = CH - PAD_Y * 1.4 - BLOCK_H;
-      }
-
-      // ── 6. NÚMERO DO SLIDE ───────────────────────────────────────
+      // ── 4. NÚMERO DO SLIDE ───────────────────────────────────────────
       ctx.save();
       ctx.font = numFont;
       ctx.shadowColor = "rgba(0,0,0,0.6)";
@@ -208,93 +287,101 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
       ctx.textBaseline = "alphabetic";
       ctx.restore();
 
-      // ── 7. TÍTULO ────────────────────────────────────────────────
+      // ── 5. TÍTULO ────────────────────────────────────────────────────
+      const titleMaxW = imgW * L.titleMaxWidthRatio;
+      const tLines = wrapTxt(ctx, sl.titulo, tFont, titleMaxW, 3);
+      const tLH = TTL_SIZE * F * 0.96;
+
       ctx.font = tFont;
+      ctx.textAlign = L.titleAlign;
+      let curY = ty(L.titleY);
+
       tLines.forEach((ln, idx) => {
         const isAccentLine = idx === tLines.length - 1;
+        const lineX = tx(L.titleX);
+
         if (isAccentLine) {
-          // Passada 1: glow difuso
           ctx.save();
+          ctx.textAlign = L.titleAlign;
           ctx.shadowColor = accent;
           ctx.shadowBlur = 55 * F;
-          ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = 6 * F;
           ctx.globalAlpha = 0.6;
           ctx.fillStyle = accent;
-          ctx.fillText(ln, textX, ty);
+          ctx.fillText(ln, lineX, curY);
           ctx.restore();
-          // Passada 2: texto nítido
           ctx.save();
+          ctx.textAlign = L.titleAlign;
           ctx.shadowColor = `rgba(${accentRgb},0.4)`;
           ctx.shadowBlur = 20 * F;
-          ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = 3 * F;
           ctx.fillStyle = accent;
-          ctx.fillText(ln, textX, ty);
+          ctx.fillText(ln, lineX, curY);
           ctx.restore();
         } else {
           ctx.save();
+          ctx.textAlign = L.titleAlign;
           ctx.shadowColor = "rgba(0,0,0,0.80)";
           ctx.shadowBlur = 22 * F;
-          ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = 4 * F;
           ctx.fillStyle = "#ffffff";
-          ctx.fillText(ln, textX, ty);
+          ctx.fillText(ln, lineX, curY);
           ctx.restore();
         }
-        ty += tLH;
+        curY += tLH;
       });
+      ctx.textAlign = "left"; // reset
 
-      // ── 8. SUBTÍTULO ─────────────────────────────────────────────
-      if (sLines.length) {
-        ty += GAP_TS;
+      // ── 6. SUBTÍTULO ─────────────────────────────────────────────────
+      if (sl.subtitulo) {
+        const subMaxW = imgW * L.subtitleMaxWidthRatio;
+        const sLines = wrapTxt(ctx, sl.subtitulo, sFont, subMaxW, 3);
+        const sLH = SUB_SIZE * F * 1.5;
+
         ctx.font = sFont;
+        ctx.textAlign = L.subtitleAlign;
+        curY = ty(L.subtitleY);
+
         sLines.forEach((ln) => {
           ctx.save();
+          ctx.textAlign = L.subtitleAlign;
           ctx.shadowColor = "rgba(0,0,0,0.70)";
           ctx.shadowBlur = 16 * F;
-          ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = 3 * F;
           ctx.fillStyle = "rgba(255,255,255,0.88)";
-          ctx.fillText(ln, textX, ty);
+          ctx.fillText(ln, tx(L.subtitleX), curY);
           ctx.restore();
-          ty += sLH;
+          curY += sLH;
         });
+        ctx.textAlign = "left";
       }
 
-      // ── 9. CTA — pílula premium texto + ícone seta ───────────────
+      // ── 7. CTA ───────────────────────────────────────────────────────
       if (sl.cta) {
-        ty += CTA_GAP;
         ctx.font = ctaFont;
-
         const ICON_W = 32 * F;
         const ICON_GAP = 12 * F;
         const PAD_L = 28 * F;
         const PAD_R = 20 * F;
-
-        const textMetrics = ctx.measureText(sl.cta);
-        const ctaW = PAD_L + textMetrics.width + ICON_GAP + ICON_W + PAD_R;
+        const tm = ctx.measureText(sl.cta);
+        const ctaW = PAD_L + tm.width + ICON_GAP + ICON_W + PAD_R;
         const ctaH = 58 * F;
-        const cx = textX;
-        const cy = ty;
+        const cx = tx(L.ctaX);
+        const cy = ty(L.ctaY) - ctaH * 0.5;
 
-        // Sombra projetada colorida
         ctx.save();
         ctx.shadowColor = `rgba(${accentRgb},0.55)`;
         ctx.shadowBlur = 36 * F;
-        ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 8 * F;
         ctx.fillStyle = accent;
         rrect(ctx, cx, cy, ctaW, ctaH, 30 * F);
         ctx.fill();
         ctx.restore();
 
-        // Fill limpo
         ctx.fillStyle = accent;
         rrect(ctx, cx, cy, ctaW, ctaH, 30 * F);
         ctx.fill();
 
-        // Highlight chanfro
         const hl = ctx.createLinearGradient(cx, cy, cx, cy + ctaH * 0.55);
         hl.addColorStop(0, "rgba(255,255,255,0.28)");
         hl.addColorStop(0.5, "rgba(255,255,255,0.06)");
@@ -303,7 +390,6 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
         rrect(ctx, cx, cy, ctaW, ctaH * 0.55, 30 * F);
         ctx.fill();
 
-        // Borda sutil
         ctx.save();
         ctx.strokeStyle = "rgba(255,255,255,0.18)";
         ctx.lineWidth = 1.5 * F;
@@ -311,7 +397,6 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
         ctx.stroke();
         ctx.restore();
 
-        // Texto
         ctx.save();
         ctx.font = ctaFont;
         ctx.shadowColor = "rgba(0,0,0,0.30)";
@@ -323,8 +408,7 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
         ctx.textBaseline = "alphabetic";
         ctx.restore();
 
-        // Ícone — círculo + seta →
-        const iconCX = cx + PAD_L + textMetrics.width + ICON_GAP + ICON_W * 0.5;
+        const iconCX = cx + PAD_L + tm.width + ICON_GAP + ICON_W * 0.5;
         const iconCY = cy + ctaH * 0.5;
         const iconR = ICON_W * 0.42;
 
@@ -378,16 +462,31 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
           ctx.globalAlpha = 0.35;
           ctx.drawImage(fi, fx, CH * 0.05, fw, fh);
           ctx.restore();
-          doText();
+
+          const b64 = canvas.toDataURL("image/jpeg", 0.75).split(",")[1];
+          analyzeLayout(b64, sl.titulo, sl.subtitulo ?? "", !!sl.cta, sl.fmt).then((layout) => {
+            aiLayout = layout;
+            doText();
+            exportBlob();
+          });
+
           exportBlob();
         };
         fi.onerror = () => {
-          doText();
+          analyzeLayout("", sl.titulo, sl.subtitulo ?? "", !!sl.cta, sl.fmt).then((layout) => {
+            aiLayout = layout;
+            doText();
+            exportBlob();
+          });
           exportBlob();
         };
         fi.src = "data:image/jpeg;base64," + faceB64;
       } else {
-        doText();
+        analyzeLayout("", sl.titulo, sl.subtitulo ?? "", !!sl.cta, sl.fmt).then((layout) => {
+          aiLayout = layout;
+          doText();
+          exportBlob();
+        });
         exportBlob();
       }
     };
@@ -396,8 +495,18 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
     if (imgSrc) {
       const img = new Image();
       img.crossOrigin = "anonymous";
-      img.onload = () => {
+      img.onload = async () => {
         ctx.drawImage(img, 0, 0, CW, CH);
+
+        // Captura a imagem como base64 para análise
+        const snapshotCanvas = document.createElement("canvas");
+        snapshotCanvas.width = Math.round(CW / 2); // metade — suficiente para visão
+        snapshotCanvas.height = Math.round(CH / 2);
+        const sCtx = snapshotCanvas.getContext("2d")!;
+        sCtx.drawImage(canvas, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
+        const b64 = snapshotCanvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+
+        aiLayout = await analyzeLayout(b64, sl.titulo, sl.subtitulo ?? "", !!sl.cta, sl.fmt);
         doText();
         exportBlob();
       };

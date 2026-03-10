@@ -173,59 +173,6 @@ export function detectLayoutPosition(sl: SlideData, slideIndex: number, totalSli
   return "bottom-left";
 }
 
-// ─── COMPOSITION INSTRUCTIONS PER LAYOUT ──────────────────────
-function getCompositionInstruction(pos: LayoutPosition): string {
-  const instructions: Record<LayoutPosition, string> = {
-    "bottom-left": [
-      "COMPOSITION: Subject in TIGHT CLOSE-UP or medium-close frame — face and upper body prominent, filling the upper 55% of the image.",
-      "Camera at slight downward angle for authority. Subject slightly off-center to the left.",
-      "The LOWER 45% transitions from the scene into deep atmospheric darkness with the scene's ambient color temperature visible at 8-15% — NOT pure black.",
-      "This dark-gradient zone carries the scene's colored light, like neon on wet concrete — alive with faint color.",
-      "No objects, body parts or scene details in this lower text zone.",
-    ].join("\n"),
-
-    "bottom-center": [
-      "COMPOSITION: Main visual element prominent in the UPPER 55%, centered.",
-      "The LOWER 40% is a cinematic atmospheric fade — scene color temperature bleeds downward into deep dark at 8-15% intensity.",
-      "Bottom zone reserved for centered text overlay — must feel like the scene is fading, not cut off.",
-    ].join("\n"),
-
-    right: [
-      "COMPOSITION: Subject in TIGHT CLOSE-UP filling the LEFT 52% — face large, expressive, cinematic.",
-      "The RIGHT 45% fades into atmospheric darkness carrying a faint directional glow or color spill from the scene's key light.",
-      "Dark vignetting on the right with visible ambient color contamination — the darkness has depth and color, not void.",
-      "Subject faces slightly right/toward camera with strong eye contact.",
-    ].join("\n"),
-
-    left: [
-      "COMPOSITION: Subject in TIGHT CLOSE-UP filling the RIGHT 52% — face large, expressive, cinematic.",
-      "The LEFT 45% fades into rich atmospheric shadow — the scene's ambient light wraps around into this zone at low intensity.",
-      "Dark left zone with colored shadow contamination matching the scene palette.",
-    ].join("\n"),
-
-    "top-center": [
-      "COMPOSITION: Subject in TIGHT CLOSE-UP filling the LOWER 55% — face and shoulders prominent.",
-      "The UPPER 40% has deep cinematic atmosphere — dark with volumetric haze or light spill bleeding upward from the scene at 5-10% intensity.",
-      "Top zone reserved for bold text — moody depth, not empty black.",
-    ].join("\n"),
-
-    center: [
-      "COMPOSITION: Rich atmospheric environment throughout — layered tonal depth, deep and textured.",
-      "Main visual can be centered but subtle — every dark zone carries color from the scene's light sources.",
-      "Deep, moody, cinematic — the darkest shadows still have ambient color and texture.",
-    ].join("\n"),
-
-    "split-bottom": [
-      "COMPOSITION: Scene fills the UPPER 55%.",
-      "The LOWER 45% is a cinematic atmospheric gradient — scene color temperature fades downward into deep dark.",
-      "The transition is smooth and cinematic — ambient light still faintly visible at the bottom of the frame.",
-      "Bottom zone supports two-column text layout — depth and color, not void.",
-    ].join("\n"),
-  };
-
-  return instructions[pos];
-}
-
 // ─── SKIN & REALISM BOOSTER ───────────────────────────────────
 // Injected in all person shots for maximum photorealism
 const SKIN_REALISM =
@@ -260,8 +207,6 @@ export function buildPrompt(
 
   const hasPerson = visualHasPerson(sl.visual ?? "");
   const skinBoost = hasPerson ? SKIN_REALISM : "";
-  const compositionInstruction = getCompositionInstruction(layoutPos);
-  const textElementsHint = buildTextElementsHint(sl, layoutPos);
 
   const pos = [
     faceInstruction,
@@ -273,47 +218,23 @@ export function buildPrompt(
     sl.design || "",
     skinBoost,
     "",
-    "COMPOSITION RULES:",
-    compositionInstruction,
-    textElementsHint,
+    "COMPOSITION:",
+    "Create a cinematic scene with natural atmospheric depth and rich lighting.",
+    "The scene must have clearly distinct zones of luminosity — bright areas, mid-tones and deep atmospheric shadows.",
+    "Dark zones must carry the scene's ambient color temperature, never pure black.",
+    "Leave organic negative space somewhere in the frame — a natural dark or blurred area — that could receive text.",
+    "Do NOT plan or reserve text zones — just make a great cinematic photograph.",
     "",
     "QUALITY & ATMOSPHERE:",
-    "professional commercial photography, dramatic atmospheric depth, cinematic bokeh with creamy out-of-focus areas, subject in tack-sharp focus, RICH TEXTURED SHADOWS with ambient color contamination — all dark zones carry the scene's color temperature at 8-15% intensity, volumetric light spill on background surfaces and skin, colored light interaction visible on all dark surfaces, deep shadows with visible color tones NEVER pure black, scene lighting creates natural editorial gradients where composited typography will feel physically embedded and lit by the environment, high production value, Hasselblad medium format quality",
+    "professional commercial photography, dramatic atmospheric depth, cinematic bokeh, subject in tack-sharp focus, rich textured shadows with ambient color contamination, volumetric light spill, deep shadows with visible color tones NEVER pure black, Hasselblad medium format quality",
   ]
+
     .filter((s) => s !== undefined && s !== null)
     .map((s) => s.trim())
     .filter(Boolean)
     .join("\n");
 
   return { pos, neg: NEG };
-}
-
-function buildTextElementsHint(sl: SlideData, pos: LayoutPosition): string {
-  const textElements: string[] = [];
-  if (sl.titulo) textElements.push("a large bold title");
-  if (sl.subtitulo) textElements.push("a subtitle paragraph");
-  if (sl.cta) textElements.push("a call-to-action button");
-
-  if (!textElements.length) return "";
-
-  const zoneMap: Record<LayoutPosition, string> = {
-    "bottom-left": "the bottom-left 45% of the frame",
-    "bottom-center": "the bottom 40% of the frame, centered",
-    right: "the right 45% of the frame, vertically centered",
-    left: "the left 45% of the frame, vertically centered",
-    "top-center": "the top 40% of the frame, centered",
-    center: "the center of the frame",
-    "split-bottom": "the bottom 45% of the frame in two columns",
-  };
-
-  return [
-    `The following text elements will be composited over the image: ${textElements.join(", ")}.`,
-    `These will be placed in ${zoneMap[pos]}.`,
-    `CRITICAL: That zone must be cinematically dark but NOT pure black — use deep atmospheric gradients with the scene's ambient color temperature subtly present at 8-15% intensity.`,
-    `Think of it as a photographer leaving space for magazine text: the darkness is alive with a faint colored glow from the scene's light sources — like neon reflecting off dark wet pavement.`,
-    `This allows composited typography to appear physically lit by the scene — as if the text itself catches light from the environment.`,
-    `Do NOT place the subject's body, props, or scene details in this text zone.`,
-  ].join("\n");
 }
 
 // ─── BUILD LAYOUT (for the compositor) ────────────────────────
