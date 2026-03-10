@@ -175,8 +175,13 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
 
     const processedSlides: ProcessedSlide[] = parsed.map((s, i) => {
       const layoutPos = detectLayoutPosition(s, i, parsed.length);
+      const isFirstSlide = i === 0;
+
       const useFaceRef =
-        hasFaceRef && visualMentionsPerson(s.visual ?? "") && !visualMentionsNamedPerson(s.visual ?? "");
+        hasFaceRef &&
+        visualMentionsPerson(s.visual ?? "") &&
+        (isFirstSlide || !visualMentionsNamedPerson(s.visual ?? ""));
+      hasFaceRef && visualMentionsPerson(s.visual ?? "") && !visualMentionsNamedPerson(s.visual ?? "");
       return {
         ...s,
         prompt: buildPrompt(s, style, light, fmt, layoutPos, { useFaceRef }),
