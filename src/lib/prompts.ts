@@ -1,15 +1,15 @@
-import type { SlideData, StyleKey, LightKey, FormatKey, LayoutPosition } from "./parser";
+import type { SlideData, StyleKey, LightKey, FormatKey } from "./parser";
 
 // ─── STYLE PRESETS ────────────────────────────────────────────
 const STYLES: Record<StyleKey, string> = {
   cinematic:
-    "ultra-realistic cinematic portrait photography, 50mm-85mm prime lens f/1.4, extreme skin detail and pore texture, natural film grain, Hollywood color grading, photorealistic — scene designed for editorial text overlay: all shadow zones carry the scene's ambient color temperature at low intensity, never pure black voids",
+    "ultra-realistic cinematic portrait photography, 50mm-85mm prime lens f/1.4, extreme skin detail and pore texture, natural film grain, Hollywood color grading, photorealistic — all shadow zones carry the scene's ambient color temperature at low intensity, never pure black voids",
   corporate:
-    "professional editorial portrait photography, studio strobe key light with soft box, luxury business magazine aesthetic, photorealistic — directional shadows have warm or cool color contamination matching the scene, deep textured dark zones suitable for overlaid typography",
+    "professional editorial portrait photography, studio strobe key light with soft box, luxury business magazine aesthetic, photorealistic — directional shadows have warm or cool color contamination matching the scene, deep textured dark zones with rich tonal depth",
   futuristic:
     "hyper-realistic sci-fi portrait, futuristic neon practical lights, cyberpunk art direction, photorealistic — neon light bleeds and spills into all dark background zones, colored atmospheric glow contaminates shadows, every dark area has visible ambient hue from the scene's neon sources",
   editorial:
-    "high-end editorial portrait photography, Vogue-quality dramatic lighting, sophisticated composition, photorealistic — dark zones have multi-layer tonal depth with ambient light interaction from scene sources, designed so overlaid text feels physically lit by the environment",
+    "high-end editorial portrait photography, Vogue-quality dramatic lighting, sophisticated composition, photorealistic — dark zones have multi-layer tonal depth with ambient light interaction from scene sources",
 };
 
 const LIGHTS: Record<LightKey, string> = {
@@ -65,116 +65,12 @@ const PERSON_KEYWORDS = [
   "expert",
 ];
 
-const PERSON_LEFT_HINTS = [
-  "segurando",
-  "holding",
-  "carregando",
-  "carrying",
-  "caixa",
-  "box",
-  "microfone",
-  "microphone",
-  "perfil",
-  "profile",
-  "olhando para direita",
-];
-
-const PERSON_RIGHT_HINTS = [
-  "computador",
-  "laptop",
-  "notebook",
-  "tela",
-  "screen",
-  "trabalhando",
-  "digitando",
-  "typing",
-  "mesa",
-  "desk",
-];
-
-const ABSTRACT_KEYWORDS = [
-  "número",
-  "number",
-  "texto 3d",
-  "3d text",
-  "gráfico",
-  "chart",
-  "estatística",
-  "dados",
-  "data",
-  "ícone",
-  "icon",
-  "símbolo",
-  "abstract",
-  "abstrato",
-  "conceitual",
-  "conceptual",
-];
-
-const SCENE_KEYWORDS = [
-  "estrada",
-  "road",
-  "cidade",
-  "city",
-  "paisagem",
-  "landscape",
-  "escritório",
-  "office",
-  "palco",
-  "stage",
-  "evento",
-  "event",
-  "plateia",
-  "audience",
-  "grupo",
-  "group",
-  "equipe",
-  "team",
-  "multidão",
-  "crowd",
-  "reunião",
-  "meeting",
-];
-
-function visualHasPerson(visual: string): boolean {
+export function visualHasPerson(visual: string): boolean {
   const v = (visual ?? "").toLowerCase();
   return PERSON_KEYWORDS.some((kw) => v.includes(kw));
 }
 
-function hasKeywords(visual: string, keywords: string[]): boolean {
-  const v = (visual ?? "").toLowerCase();
-  return keywords.some((kw) => v.includes(kw));
-}
-
-// ─── LAYOUT POSITION DETECTION ────────────────────────────────
-export function detectLayoutPosition(sl: SlideData, slideIndex: number, totalSlides: number): LayoutPosition {
-  const visual = (sl.visual ?? "").toLowerCase();
-  const hasPerson = visualHasPerson(visual);
-  const isAbstract = hasKeywords(visual, ABSTRACT_KEYWORDS);
-  const isScene = hasKeywords(visual, SCENE_KEYWORDS);
-  const hasPersonLeft = hasKeywords(visual, PERSON_LEFT_HINTS);
-  const hasPersonRight = hasKeywords(visual, PERSON_RIGHT_HINTS);
-  const hasLongSubtitle = (sl.subtitulo?.length ?? 0) > 100;
-
-  if (isAbstract && !hasPerson) return "bottom-center";
-  if (isScene && !hasPerson) return hasLongSubtitle ? "split-bottom" : "bottom-center";
-
-  if (hasPerson) {
-    if (hasPersonLeft) return "right";
-    if (hasPersonRight) return "left";
-    const posInCarousel = slideIndex % totalSlides;
-    if (posInCarousel === 0) return "right";
-    if (posInCarousel % 3 === 0) return "left";
-    if (posInCarousel % 2 === 0) return "top-center";
-    return "bottom-left";
-  }
-
-  if (hasLongSubtitle) return "split-bottom";
-  return "bottom-left";
-}
-
 // ─── SKIN & REALISM BOOSTER ───────────────────────────────────
-// Injected in all person shots for maximum photorealism
 const SKIN_REALISM =
   "ultra-detailed skin texture with visible pores, natural skin imperfections, subsurface scattering on skin creating translucent warmth under strong light, sharp catchlights in eyes with natural iris detail, individual hair strands visible, natural micro-expressions";
 
@@ -184,7 +80,6 @@ export function buildPrompt(
   style: StyleKey,
   light: LightKey,
   fmt: FormatKey,
-  layoutPos: LayoutPosition,
   options?: { useFaceRef?: boolean },
 ) {
   const useFaceRef = options?.useFaceRef ?? false;
@@ -206,9 +101,8 @@ export function buildPrompt(
     : "";
 
   const hasPerson = visualHasPerson(sl.visual ?? "");
-  const skinBoost = hasPerson ? SKIN_REALISM : "";
 
-  const pos = [
+  const parts = [
     faceInstruction,
     "SCENE DESCRIPTION:",
     fmtHint[fmt],
@@ -216,54 +110,33 @@ export function buildPrompt(
     sl.visual,
     LIGHTS[light],
     sl.design || "",
-    skinBoost,
+    hasPerson ? SKIN_REALISM : "",
     "",
-    "COMPOSITION:",
-    "Create a cinematic scene with natural atmospheric depth and rich lighting.",
-    "The scene must have clearly distinct zones of luminosity — bright areas, mid-tones and deep atmospheric shadows.",
-    "Dark zones must carry the scene's ambient color temperature, never pure black.",
-    "Leave organic negative space somewhere in the frame — a natural dark or blurred area — that could receive text.",
-    "Do NOT plan or reserve text zones — just make a great cinematic photograph.",
+    "CINEMATIC COMPOSITION:",
+    "Shoot as a great cinematic photograph with natural atmospheric depth and distinct luminosity zones.",
+    "Create strong tonal contrast: bright foreground subject, rich mid-tones, deep atmospheric shadows.",
+    "CRITICAL: The image must have at least one large naturally dark or soft-focus area — subject positioned off-center with strong directional lighting creating organic negative space.",
+    "Dark shadow zones must carry the scene's ambient color temperature — never pure black voids.",
+    "Do NOT artificially reserve text zones. Just make an exceptional cinematic image with natural depth.",
     "",
     "QUALITY & ATMOSPHERE:",
-    "professional commercial photography, dramatic atmospheric depth, cinematic bokeh, subject in tack-sharp focus, rich textured shadows with ambient color contamination, volumetric light spill, deep shadows with visible color tones NEVER pure black, Hasselblad medium format quality",
+    "professional commercial photography, dramatic atmospheric depth, cinematic bokeh, subject tack-sharp, rich textured shadows with ambient color contamination at 8-15% intensity, volumetric light spill, colored shadows NEVER pure black, Hasselblad medium format quality",
   ]
-
     .filter((s) => s !== undefined && s !== null)
     .map((s) => s.trim())
     .filter(Boolean)
     .join("\n");
 
-  return { pos, neg: NEG };
+  return { pos: parts, neg: NEG };
 }
 
-// ─── BUILD LAYOUT (for the compositor) ────────────────────────
-export function buildLayout(
-  sl: SlideData,
-  light: LightKey,
-  fmt: FormatKey,
-  layoutPos: LayoutPosition,
-): {
-  accent: string;
-  layoutPos: LayoutPosition;
-  slideNum: string;
-  titulo: string;
-  subtitulo: string;
-  cta: string;
-} {
+// ─── BUILD LAYOUT (accent only — position decided by Haiku) ───
+export function buildLayout(light: LightKey): { accent: string } {
   const ACC: Record<LightKey, string> = {
     dramatic: "#00b4ff",
     warm: "#f5c842",
     green: "#c8ff00",
     moody: "#ffffff",
   };
-
-  return {
-    accent: ACC[light],
-    layoutPos,
-    slideNum: sl.num,
-    titulo: sl.titulo,
-    subtitulo: sl.subtitulo,
-    cta: sl.cta,
-  };
+  return { accent: ACC[light] };
 }
