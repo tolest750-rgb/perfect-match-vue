@@ -3,7 +3,7 @@ import type { ProcessedSlide, StyleKey, LightKey, FormatKey, ResKey, LayoutPosit
 import { parseSlides } from "./parser";
 import { buildPrompt, buildLayout, visualHasPerson, detectTitleStyle } from "./prompts";
 import type { TitleStyle } from "./prompts";
-import { analyzeLayout, composeSlide } from "./compositor";
+import { analyzeLayout, composeSlide, visualHasTitleInImage } from "./compositor";
 import type { AILayout } from "./compositor";
 import { callGemini } from "./gemini";
 
@@ -109,7 +109,15 @@ async function generateAndCompose(
       };
       const [sw, sh] = snapDims[sl.fmt] ?? [540, 675];
       const snap = await shrinkToBase64(imgSrc, sw, sh);
-      aiLayout = await analyzeLayout(snap, sl.titulo, sl.subtitulo ?? "", !!sl.cta, sl.fmt, titleStyle);
+      const titleInImg = visualHasTitleInImage(sl.visual ?? "");
+      aiLayout = await analyzeLayout(
+        snap,
+        titleInImg ? "" : sl.titulo, // se título está na imagem, não passa pro Haiku
+        sl.subtitulo ?? "",
+        !!sl.cta,
+        sl.fmt,
+        titleStyle,
+      );
     } catch {
       /* usa DEFAULT_LAYOUT */
     }

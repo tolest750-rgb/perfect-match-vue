@@ -5,6 +5,56 @@ import type { TitleStyle } from "./prompts";
 // AI LAYOUT — interface + analyzeLayout embutido
 // ─────────────────────────────────────────────────────────────
 
+// ─── DETECÇÃO: TÍTULO JÁ ESTÁ NA IMAGEM ──────────────────────
+const TITLE_IN_IMAGE_KEYWORDS = [
+  "título",
+  "titulo",
+  "title",
+  "tipografia",
+  "typography",
+  "lettering",
+  "fonte",
+  "font",
+  "escrito",
+  "texto na imagem",
+  "text in image",
+  "estilo de série",
+  "estilo de filme",
+  "todo mundo odeia",
+  "stranger things",
+  "breaking bad",
+  "peaky blinders",
+  "money heist",
+  "squid game",
+  "wednesday",
+  "succession",
+  "the office",
+  "ozark",
+  "narcos",
+  "euphoria",
+  "game of thrones",
+  "vikings",
+  "taxi driver",
+  "pulp fiction",
+  "blade runner",
+  "star wars",
+  "matrix",
+  "fight club",
+  "estilo de título",
+  "title style",
+  "render",
+  "renderizar",
+  "burn",
+  "queimar",
+  "na cena o título",
+  "título na cena",
+];
+
+export function visualHasTitleInImage(visual: string): boolean {
+  const v = (visual ?? "").toLowerCase();
+  return TITLE_IN_IMAGE_KEYWORDS.some((kw) => v.includes(kw));
+}
+
 // focusZone = onde está o sujeito principal da imagem
 // textZone  = onde o texto deve ir (oposto/complementar ao foco)
 export type FocusZone =
@@ -706,20 +756,22 @@ export async function composeSlide(
       ctx.restore();
 
       // ── 4. CALCULAR BLOCO DE TEXTO ──────────────────────
-      // Mede tudo primeiro, calcula blockH, depois posiciona
-      // Isso garante ZERO overlap entre título, subtítulo e CTA
+      // Se o VISUAL descreve o título como parte da imagem gerada,
+      // omite o título do canvas — só renderiza subtítulo e CTA.
+      const titleInImage = visualHasTitleInImage(sl.visual ?? "");
 
       const textZone = L.textZone;
-      // Para maxWidth, usamos 0.88 horizontal ou 0.44 em side zones
       const isLRZone = textZone === "left-center" || textZone === "right-center";
       const mwRatio = isLRZone ? 0.44 : 0.88;
       const maxTextW = CW * mwRatio;
 
-      // Wrapping antecipado (sem mudar ctx.font permanentemente)
-      const tLines = (() => {
-        ctx.font = tFont;
-        return wrapTxt(ctx, sl.titulo, tFont, maxTextW, 2);
-      })();
+      // Se título está na imagem, tLines fica vazio → titleBlockH = 0
+      const tLines = titleInImage
+        ? []
+        : (() => {
+            ctx.font = tFont;
+            return wrapTxt(ctx, sl.titulo, tFont, maxTextW, 2);
+          })();
       const sLines = sl.subtitulo
         ? (() => {
             ctx.font = sFont;
@@ -736,36 +788,34 @@ export async function composeSlide(
       const CTA_PAD_R = 20 * F;
       const ctaPillW = ctaMetrics ? CTA_PAD_L + ctaMetrics.width + ICON_GAP + ICON_W + CTA_PAD_R : 0;
 
-      // Altura total do bloco (title + sub + cta, sem gaps no final)
+      // Altura total do bloco (sem título se titleInImage)
       const titleBlockH = tLines.length * tLH;
       const subBlockH = sLines.length > 0 ? GAP_TS + sLines.length * sLH : 0;
       const ctaBlockH = sl.cta ? GAP_SC + CTA_H : 0;
       const blockH = titleBlockH + subBlockH + ctaBlockH;
 
-      // Geometria baseada na textZone
       const geo = getTextGeometry(textZone, CW, CH, PAD_X, PAD_Y, blockH);
 
-      // ── 5. RENDERIZA TÍTULO ─────────────────────────────
-      ctx.font = tFont;
-      const titleY = geo.blockTopY + tLines[0] ? tLH * 0.92 : 0; // baseline da 1ª linha
-
-      // Recompute: blockTopY é o topo, então primeira baseline = topo + tLH
+      // ── 5. RENDERIZA TÍTULO (omite se título está na imagem) ─
       let curY = geo.blockTopY + tLH;
 
-      renderTitle(L.titleStyle ?? "default", {
-        ctx,
-        lines: tLines,
-        startY: curY,
-        textX: geo.anchorX,
-        align: geo.align,
-        TTL_SIZE,
-        F,
-        accent,
-        accentRgb,
-        CW,
-        CH,
-        lineHeight: tLH,
-      });
+      if (!titleInImage) {
+        ctx.font = tFont;
+        renderTitle(L.titleStyle ?? "default", {
+          ctx,
+          lines: tLines,
+          startY: curY,
+          textX: geo.anchorX,
+          align: geo.align,
+          TTL_SIZE,
+          F,
+          accent,
+          accentRgb,
+          CW,
+          CH,
+          lineHeight: tLH,
+        });
+      }
       // Avança curY pelo número de linhas do título
       curY = geo.blockTopY + titleBlockH + sLH * 0.1;
 
