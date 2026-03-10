@@ -16,10 +16,13 @@ export async function callGemini(sl: ProcessedSlide, varIdx: number, faceB64: st
     .filter(Boolean)
     .join("\n");
 
+  // Only send faceB64 when the slide actually needs face reference
+  const sendFace = sl.useFaceRef && faceB64 ? faceB64 : undefined;
+
   const { data, error } = await supabase.functions.invoke("generate-image", {
     body: {
       prompt: promptText,
-      faceB64: faceB64 || undefined,
+      faceB64: sendFace,
     },
   });
 

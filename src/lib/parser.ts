@@ -27,6 +27,7 @@ export interface ProcessedSlide extends SlideData {
   prompt: { pos: string; neg: string };
   layout: string;
   layoutPosition: LayoutPosition;
+  useFaceRef: boolean;
   fmt: string;
   style: string;
   light: string;

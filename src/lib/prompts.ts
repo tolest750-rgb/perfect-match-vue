@@ -132,70 +132,6 @@ export function detectLayoutPosition(
   return 'bottom-left';
 }
 
-// ─── COMPOSITION INSTRUCTIONS PER LAYOUT ──────────────────────
-function getCompositionInstruction(pos: LayoutPosition, fmt: FormatKey): string {
-  const instructions: Record<LayoutPosition, string> = {
-    'bottom-left': [
-      "COMPOSITION: Subject positioned in the UPPER 50% of the frame.",
-      "The LOWER 45% must be a clean dark gradient area — NO objects, NO details.",
-      "This lower zone is reserved exclusively for text overlay.",
-      "Subject should be slightly off-center to the right.",
-    ].join('\n'),
-    
-    'bottom-center': [
-      "COMPOSITION: Main visual element positioned in the UPPER 55% of the frame, centered.",
-      "The LOWER 40% must be a smooth dark gradient with NO scene elements.",
-      "This bottom zone is strictly reserved for centered text overlay.",
-      "The visual should have a natural dark falloff toward the bottom.",
-    ].join('\n'),
-    
-    'right': [
-      "COMPOSITION: Subject positioned on the LEFT 50% of the frame.",
-      "The RIGHT 45% should be relatively dark or have dark atmospheric depth.",
-      "This right zone is reserved for text overlay — keep it clean and readable.",
-      "Subject should face slightly toward the right/camera.",
-      "Use dark vignetting on the right side.",
-    ].join('\n'),
-    
-    'left': [
-      "COMPOSITION: Subject positioned on the RIGHT 50% of the frame.",
-      "The LEFT 45% should be dark or have deep atmospheric shadows.",
-      "This left zone is reserved for text overlay — keep it uncluttered.",
-      "Dark vignetting on the left side for text readability.",
-    ].join('\n'),
-    
-    'top-center': [
-      "COMPOSITION: Subject positioned in the LOWER 55% of the frame.",
-      "The UPPER 40% must have dark atmosphere or clean dark space.",
-      "This upper zone is reserved for bold text overlay.",
-      "Subject placed from center to bottom, looking upward or forward.",
-      "Natural dark falloff toward the top of the frame.",
-    ].join('\n'),
-    
-    'center': [
-      "COMPOSITION: Dark atmospheric background throughout.",
-      "Main visual element can be centered but subtle.",
-      "The entire frame should support text overlay with good contrast.",
-      "Deep, moody, minimal background with cinematic depth.",
-    ].join('\n'),
-    
-    'split-bottom': [
-      "COMPOSITION: Scene/visual fills the UPPER 55% of the frame.",
-      "The LOWER 45% must be a clean dark gradient — this is the text zone.",
-      "The transition from scene to dark should be smooth and cinematic.",
-      "Bottom area needs to support a two-column text layout.",
-    ].join('\n'),
-  };
-  
-  const fmtHint: Record<FormatKey, string> = {
-    "4:5": "vertical 4:5 portrait format (1080×1350px)",
-    "9:16": "vertical 9:16 tall format (1080×1920px)",
-    "1:1": "square 1:1 format (1080×1080px)",
-  };
-
-  return `${fmtHint[fmt]}\n${instructions[pos]}`;
-}
-
 // ─── BUILD PROMPT ─────────────────────────────────────────────
 export function buildPrompt(
   sl: SlideData,
@@ -205,9 +141,9 @@ export function buildPrompt(
   layoutPos: LayoutPosition,
   options?: { useFaceRef?: boolean }
 ) {
-  const hasPerson = options?.useFaceRef ?? visualHasPerson(sl.visual ?? '');
+  const useFace = options?.useFaceRef ?? false;
 
-  const faceInstruction = hasPerson
+  const faceInstruction = useFace
     ? [
         'FACE REFERENCE IMAGE ATTACHED:',
         'Use the face reference photo ONLY to extract facial identity (face shape, eyes, skin tone, nose, lips, jawline, brow, hair).',
@@ -216,25 +152,26 @@ export function buildPrompt(
       ].join(' ')
     : '';
 
-  const compositionInstruction = getCompositionInstruction(layoutPos, fmt);
+  const fmtHint: Record<FormatKey, string> = {
+    "4:5": "vertical 4:5 portrait format (1080×1350px)",
+    "9:16": "vertical 9:16 tall format (1080×1920px)",
+    "1:1": "square 1:1 format (1080×1080px)",
+  };
 
   const pos = [
     "LAYOUT REFERENCE IMAGE ATTACHED:",
-    "A LAYOUT REFERENCE image is provided showing the exact visual style to follow.",
-    "Study the reference for: text positioning zones, dark gradient areas, subject placement, and overall composition balance.",
-    "The generated image must leave identical clean/dark zones for text overlay as shown in the reference.",
+    "A LAYOUT REFERENCE image is provided showing the exact visual style, composition, text zones, and dark gradient areas to replicate.",
+    "Study the reference carefully and reproduce the same composition balance, subject placement, and clean/dark zones for text overlay.",
     "DO NOT generate any text, typography, letters, or words in the image — only the photographic scene.",
     "",
-    faceInstruction,
+    useFace ? faceInstruction : '',
     "",
     "SCENE DESCRIPTION:",
+    fmtHint[fmt],
     STYLES[style],
     sl.visual,
     LIGHTS[light],
     sl.design || "",
-    "",
-    "COMPOSITION RULES:",
-    compositionInstruction,
     "",
     "QUALITY:",
     "professional commercial photography, dramatic atmospheric depth, cinematic bokeh, subject in sharp focus, dark rich background, high production value",
@@ -247,8 +184,6 @@ export function buildPrompt(
   return { pos, neg: NEG };
 }
 
-// buildTextElementsHint removed — layout reference image now handles text zone guidance
-
 // ─── BUILD LAYOUT (for the compositor) ────────────────────────
 export function buildLayout(sl: SlideData, light: LightKey, fmt: FormatKey, layoutPos: LayoutPosition) {
   const ACC: Record<LightKey, string> = {
@@ -257,46 +192,7 @@ export function buildLayout(sl: SlideData, light: LightKey, fmt: FormatKey, layo
     green:    '#c8ff00',
     moody:    '#ffffff',
   };
-  const DIM: Record<FormatKey, string> = {
-    '4:5':  '1080×1350px',
-    '9:16': '1080×1920px',
-    '1:1':  '1080×1080px',
-  };
   const accent = ACC[light];
 
-  return `LAYOUT — SLIDE ${sl.num} | ${DIM[fmt]} | Position: ${layoutPos}
-════════════════════════════════════
-REFERÊNCIA ESTÉTICA: editorial bold, neon accent, dark background
-Inspiração: carrossel de marca pessoal estilo agência premium brasileira
-
-ACCENT COLOR: ${accent}
-LAYOUT POSITION: ${layoutPos}
-
-── HIERARQUIA TIPOGRÁFICA ──────────
-
-① NÚMERO DO SLIDE [${sl.num}]
-  Font: Bricolage Grotesque 700 | 13px | tracking: 2px
-  Cor: rgba(255,255,255,0.38)
-
-② TÍTULO: "${sl.titulo}"
-  Font: Bricolage Grotesque 900 Italic | 44–52px | max 3 linhas | line-height: 1.08
-  Cor: ${accent} (cor de acento — NUNCA branco)
-  Uppercase
-
-③ SUBTÍTULO: "${sl.subtitulo}"
-  Font: Bricolage Grotesque 400 | 18px | line-height: 1.55
-  Cor: rgba(255,255,255,0.90)
-  Palavras-chave em bold branco puro
-${sl.cta ? `
-④ CTA: "${sl.cta}"
-  Font: Bricolage Grotesque 700 | 12px | uppercase | tracking: 1.5px
-  Background: ${accent} | Cor texto: #000000
-  Padding: 12px 22px | border-radius: 8px` : ''}
-
-── REGRAS ─────────────────────────
-- Título SEMPRE em ${accent} — nunca branco
-- Subtítulo branco com palavras-chave em bold
-- Hierarquia visual clara: título > subtítulo > CTA
-- Fundo da zona de texto escuro o suficiente para legibilidade
-════════════════════════════════════`;
+  return { accent, layoutPos, slideNum: sl.num, titulo: sl.titulo, subtitulo: sl.subtitulo, cta: sl.cta };
 }
