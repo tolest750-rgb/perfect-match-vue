@@ -9,6 +9,9 @@ interface CarouselState {
   faceB64: string;
   faceDataUrl: string;
   faceName: string;
+  layoutRefB64: string;
+  layoutRefDataUrl: string;
+  layoutRefName: string;
   style: StyleKey;
   light: LightKey;
   fmt: FormatKey;
