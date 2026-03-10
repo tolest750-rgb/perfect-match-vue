@@ -25,7 +25,7 @@ export type LayoutPosition =
 
 export interface ProcessedSlide extends SlideData {
   prompt: { pos: string; neg: string };
-  layout: string;
+  layout: { accent: string; layoutPos: LayoutPosition; slideNum: string; titulo: string; subtitulo: string; cta: string };
   layoutPosition: LayoutPosition;
   useFaceRef: boolean;
   fmt: string;
