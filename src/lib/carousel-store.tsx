@@ -233,7 +233,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
 
   const regenVar = useCallback(
     async (slideIdx: number, varIdx: number) => {
-      if (!apiKey && !demo) return;
+      if (!demo) return;
       const sl = slides[slideIdx];
       if (!sl) return;
       setVarStatus(slideIdx, varIdx, "generating");
