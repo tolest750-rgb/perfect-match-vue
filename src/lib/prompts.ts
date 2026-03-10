@@ -48,27 +48,52 @@ function visualHasPerson(visual: string): boolean {
   return PERSON_KEYWORDS.some((kw) => v.includes(kw));
 }
 
+const PERSON_KEYWORDS = [
+  'pessoa', 'homem', 'mulher', 'menino', 'menina', 'criança',
+  'executivo', 'empresário', 'empresária', 'líder', 'atleta',
+  'médico', 'profissional', 'founder', 'ceo', 'palestrante',
+  'especialista', 'autor', 'coach', 'ele', 'ela',
+  'person', 'man', 'woman', 'boy', 'girl', 'human', 'speaker', 'expert',
+];
+
+function visualHasPerson(visual: string): boolean {
+  const v = (visual ?? '').toLowerCase();
+  return PERSON_KEYWORDS.some(kw => v.includes(kw));
+}
+
 export function buildPrompt(
   sl: SlideData,
   style: StyleKey,
   light: LightKey,
   fmt: FormatKey,
-  options?: { useFaceRef?: boolean },
+  options?: { useFaceRef?: boolean }
 ) {
-  const shouldUseFaceRef = options?.useFaceRef ?? visualHasPerson(sl.visual ?? "");
+  const hasPerson = options?.useFaceRef ?? visualHasPerson(sl.visual ?? '');
 
-  const faceInstruction = shouldUseFaceRef
+  // Só menciona a imagem de referência se o VISUAL citar uma pessoa
+  const faceInstruction = hasPerson
     ? [
-        "CRITICAL INSTRUCTION — FACE REFERENCE USAGE:",
-        "A small reference photo is attached. This photo is ONLY for extracting the person's facial identity.",
-        "DO NOT reproduce, paste, overlay, or composite this reference photo into the scene.",
-        "DO NOT use the reference photo's background, clothing, lighting, pose, or composition.",
-        "Instead: study ONLY the person's unique facial features — face shape, eye color/shape, skin tone, nose, lips, jawline, brow, and hair style/color.",
-        "Then GENERATE a completely new photograph of this same person FROM SCRATCH, naturally placed in the scene described below.",
-        "The person must wear the described outfit, in the described setting and pose — but their face MUST be unmistakably the same individual.",
-        "The reference photo should have ZERO influence on the final image except for facial identity.",
-      ].join("\n")
-    : "";
+        'CRITICAL INSTRUCTION — FACE REFERENCE USAGE:',
+        'A reference photo is attached. Use it ONLY to extract the facial identity of the person.',
+        'DO NOT reproduce, paste, composite or reuse the reference photo background, clothing, pose or lighting.',
+        'Study ONLY the unique facial features: face shape, eye color/shape, skin tone, nose, lips, jawline, brow, hair.',
+        'GENERATE a completely new photograph of this same person FROM SCRATCH, naturally in the scene described below.',
+        'The face must be unmistakably the same individual. Zero influence from the reference except facial identity.',
+      ].join(' ')
+    : ''; // ← sem pessoa no VISUAL = referência completamente omitida do prompt
+
+  const pos = [
+    faceInstruction,
+    STYLES[style],
+    sl.visual,
+    LIGHTS[light],
+    sl.design || '',
+    COMPS[fmt],
+    'professional commercial photography quality, dramatic atmospheric depth, cinematic bokeh, sharp focus, high production value',
+  ].filter(Boolean).map(s => s.trim()).join('. ');
+
+  return { pos, neg: NEG };
+}
 
   // Layout-aware composition instruction
   const layoutInstruction = buildLayoutCompositionHint(sl, fmt);
@@ -128,31 +153,80 @@ function buildLayoutCompositionHint(sl: SlideData, fmt: FormatKey): string {
 }
 
 export function buildLayout(sl: SlideData, light: LightKey, fmt: FormatKey) {
-  const ACC: Record<LightKey, string> = { dramatic: "#00b4ff", warm: "#f5c842", green: "#c8ff00", moody: "#ffffff" };
-  const DIM: Record<FormatKey, string> = { "4:5": "1080×1350px", "9:16": "1080×1920px", "1:1": "1080×1080px" };
+  // Cor de acento: lime-green é o padrão dominante do sistema visual (como nas refs)
+  // Outros modos mantêm sua cor, mas o green usa sempre #c8ff00
+  const ACC: Record<LightKey, string> = {
+    dramatic: '#00b4ff',
+    warm:     '#f5c842',
+    green:    '#c8ff00',  // lime-green — cor dominante do sistema Britto*
+    moody:    '#ffffff',
+  };
+  const DIM: Record<FormatKey, string> = {
+    '4:5':  '1080×1350px',
+    '9:16': '1080×1920px',
+    '1:1':  '1080×1080px',
+  };
+  const accent = ACC[light];
+  const hasPerson = visualHasPerson(sl.visual ?? '');
+
+  // Zona de texto: slides com pessoa ficam na base; sem pessoa podem ocupar mais área
+  const textZone = hasPerson
+    ? 'Zona inferior: últimos 45% da altura — gradiente cobre essa área inteiramente'
+    : 'Zona inferior: últimos 55% da altura — fundo escuro sólido/gradiente nessa área';
+
   return `LAYOUT — SLIDE ${sl.num} | ${DIM[fmt]}
-────────────────────────────────────
-OVERLAY: linear-gradient(to top,
-  rgba(0,0,0,0.93) 0%,  rgba(0,0,0,0.28) 45%,  rgba(0,0,0,0.00) 78%)
+════════════════════════════════════
+REFERÊNCIA ESTÉTICA: editorial bold, neon accent, dark background
+Inspiração: carrossel de marca pessoal estilo agência premium brasileira
 
-NÚMERO [${sl.num}]
-  Font: Bricolage Grotesque Bold 700 | 13px
-  Color: rgba(255,255,255,0.42) | top:20px left:22px
+MARGENS (todas as bordas):
+  Horizontal: 76px (7% de 1080px)
+  Vertical topo/base: 81px (6% da altura)
+  Mínimo entre elementos: 14px
 
-TÍTULO: "${sl.titulo}"
-  Font: Bricolage Grotesque 800 | 38–44px | max 2 linhas
-  Color: #FFFFFF | Line-height: 1.15
+OVERLAY / GRADIENTE:
+  linear-gradient(to top,
+    rgba(0,0,0,0.95) 0%,
+    rgba(0,0,0,0.80) 30%,
+    rgba(0,0,0,0.35) 55%,
+    rgba(0,0,0,0.00) 78%
+  )
+  ${textZone}
 
-SUBTÍTULO: "${sl.subtitulo}"
-  Font: Bricolage Grotesque 300 | 15–16px
-  Color: rgba(255,255,255,0.70) | 10px abaixo título
-${
-  sl.cta
-    ? `
-CTA [bottom-right]: "${sl.cta}"
-  Background: ${ACC[light]} | Text: #000
-  Bold 700 | 11px | Padding: 10px 18px | border-radius: 8px`
-    : ""
-}
-────────────────────────────────────`;
+── HIERARQUIA TIPOGRÁFICA ──────────
+
+① NÚMERO DO SLIDE [${sl.num}]
+  Font: Bricolage Grotesque 700 | 13px | tracking: 2px
+  Cor: rgba(255,255,255,0.38)
+  Posição: topo esquerdo com margem completa (76px, 81px)
+
+② TÍTULO: "${sl.titulo}"
+  Font: Bricolage Grotesque 800 | 42–48px | max 2 linhas | line-height: 1.12
+  Cor: ${accent}   ← cor de acento do tema (NÃO branco — destaque máximo)
+  Uppercase se ≤ 4 palavras; title-case se > 4 palavras
+  Margem esquerda: 76px | Margem direita: 76px
+
+③ SUBTÍTULO: "${sl.subtitulo}"
+  Font: Bricolage Grotesque 300 | 17px | line-height: 1.55
+  Cor: rgba(255,255,255,0.88)
+  Espaço do título: 16px
+  Margem esquerda: 76px | Largura máxima: 928px (CW − 2×76px)
+${sl.cta ? `
+④ CTA: "${sl.cta}"
+  Font: Bricolage Grotesque 700 | 12px | uppercase | tracking: 1.5px
+  Background: ${accent} | Cor texto: #000000
+  Padding: 12px 22px | border-radius: 8px
+  Posição: alinhado à ESQUERDA (76px) | espaço do subtítulo: 20px
+  NÃO colocar no canto direito — alinhado com o texto` : ''}
+
+── REGRAS DE COMPOSIÇÃO ────────────
+- Título sempre em ${accent} — nunca branco puro para o título principal
+- Subtítulo sempre em branco/quase-branco — hierarquia clara com o título
+- CTA alinhado à esquerda junto ao bloco de texto (não canto direito)
+- Bloco de texto deve "respirar" — espaçamento generoso entre elementos
+- Fundo da zona de texto: escuro o suficiente para o texto ser legível sem esforço
+- Se não há pessoa na cena: zona de texto pode ser fundo quase-sólido (como slides 2, 4, 6, 7 das refs)
+- Se há pessoa na cena: gradiente sobe pela figura preservando rosto (como slides 1, 3, 5, 8 das refs)
+
+════════════════════════════════════`;
 }
