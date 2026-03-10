@@ -257,11 +257,21 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
                           ↺ REGEN
                         </button>
                       </div>
-                    )}
+                 )}
                   </div>
                 );
               })}
             </div>
+
+            {[0, 1, 2, 3].some(v => !!varUrls[`${index}_${v}`]) && (
+              <button
+                onClick={dlAllZip}
+                disabled={enhancing[`${index}_zip`]}
+                className="w-full mt-2 bg-transparent border border-primary/40 rounded-sm text-primary font-mono text-[9px] tracking-[1.5px] uppercase py-1.5 cursor-pointer transition-all duration-200 hover:bg-primary/[0.06] hover:border-primary hover:shadow-[0_0_12px_hsl(var(--primary)/0.15)] disabled:opacity-40"
+              >
+                {enhancing[`${index}_zip`] ? "↑ APLICANDO 4K UPSCALE..." : "▼ BAIXAR TODAS · ZIP · 4K"}
+              </button>
+            )}
           </div>
 
           {/* Prompts section */}
