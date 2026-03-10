@@ -25,6 +25,9 @@ interface CarouselState {
   isGenerating: boolean;
   progress: { done: number; total: number };
   generationComplete: boolean;
+  layoutRefDataUrl: string;
+  layoutRefName: string;
+  slideSteps: Record<number, string[]>;
 }
 
 interface CarouselActions {
@@ -34,6 +37,7 @@ interface CarouselActions {
   setFmt: (f: FormatKey) => void;
   setRes: (r: ResKey) => void;
   setRawText: (t: string) => void;
+  setLayoutRef: (file: File) => void;
   startGeneration: () => Promise<void>;
   regenVar: (slideIdx: number, varIdx: number) => Promise<void>;
   getVarBlob: (slideIdx: number, varIdx: number) => Blob | null;
@@ -122,6 +126,8 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const [faceB64, setFaceB64State] = useState("");
   const [faceDataUrl, setFaceDataUrl] = useState("");
   const [faceName, setFaceName] = useState("");
+  const [layoutRefDataUrl, setLayoutRefDataUrl] = useState(""); // ← ADD
+  const [layoutRefName, setLayoutRefName] = useState(""); // ← ADD
   const [style, setStyle] = useState<StyleKey>("cinematic");
   const [light, setLight] = useState<LightKey>("dramatic");
   const [fmt, setFmt] = useState<FormatKey>("4:5");
@@ -135,6 +141,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [generationComplete, setGenerationComplete] = useState(false);
+  const [slideSteps, setSlideSteps] = useState<Record<number, string[]>>({});
 
   const faceB64Ref = useRef("");
 
@@ -147,6 +154,16 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
       faceB64Ref.current = b64;
       setFaceDataUrl(dataUrl);
       setFaceName(file.name);
+    };
+    r.readAsDataURL(file);
+  }, []);
+
+  const setLayoutRef = useCallback((file: File) => {
+    const r = new FileReader();
+    r.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setLayoutRefDataUrl(dataUrl);
+      setLayoutRefName(file.name);
     };
     r.readAsDataURL(file);
   }, []);
@@ -178,8 +195,8 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
         style,
         light,
         res,
-        // titleStyle detectado no visual + design de cada slide
         titleStyle: detectTitleStyle(s.visual ?? "", s.design),
+        layoutPosition: s.layoutPosition ?? "bottom",
       };
     });
 
@@ -188,6 +205,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     setVarUrls({});
     setVarStatuses({});
     setSlideStatuses({});
+    setSlideSteps({}); // ← ADD
     setIsGenerating(true);
     setGenerationComplete(false);
     setProgress({ done: 0, total: totalSlides });
@@ -256,6 +274,9 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     faceB64,
     faceDataUrl,
     faceName,
+    layoutRefDataUrl,
+    layoutRefName, // ← ADD
+    slideSteps, // ← ADD
     style,
     light,
     fmt,
@@ -270,6 +291,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     progress,
     generationComplete,
     setFace,
+    setLayoutRef, // ← ADD setLayoutRef
     setStyle,
     setLight,
     setFmt,
