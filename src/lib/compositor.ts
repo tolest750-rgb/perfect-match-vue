@@ -660,9 +660,12 @@ export async function composeSlide(
 
   // ── Tipografia ──────────────────────────────────────────────
   const NUM_SIZE = Math.round(14 * F);
-  const TTL_SIZE = Math.round(96 * F);
   const SUB_SIZE = Math.round(34 * F);
   const CTA_SIZE = Math.round(20 * F);
+
+  // Tamanho dinâmico do título baseado no número de caracteres
+  const titleLen = (sl.titulo ?? "").length;
+  const TTL_SIZE = Math.round((titleLen <= 20 ? 96 : titleLen <= 35 ? 78 : titleLen <= 50 ? 62 : 50) * F);
 
   const numFont = `700 ${NUM_SIZE}px 'Bricolage Grotesque', sans-serif`;
   const tFont = `800 ${TTL_SIZE}px 'Bricolage Grotesque', sans-serif`;
@@ -756,22 +759,26 @@ export async function composeSlide(
       ctx.restore();
 
       // ── 4. CALCULAR BLOCO DE TEXTO ──────────────────────
-      // Se o VISUAL descreve o título como parte da imagem gerada,
-      // omite o título do canvas — só renderiza subtítulo e CTA.
-      const titleInImage = visualHasTitleInImage(sl.visual ?? "");
+      // Diagramação por posição do slide:
+      // Slide 1 (capa) → center  |  Último → center
+      // Pares (2,4,6…) → left    |  Ímpares a partir do 3 → right
+      const isLast = sl.n === sl.tot;
+      const isFirst = sl.n === 1;
+      const slideAlign: "left" | "center" | "right" = isFirst || isLast ? "center" : sl.n % 2 === 0 ? "left" : "right";
 
-      const textZone = L.textZone;
-      const isLRZone = textZone === "left-center" || textZone === "right-center";
-      const mwRatio = isLRZone ? 0.44 : 0.88;
+      // Sobrescreve textZone da IA pela regra editorial do carrossel
+      const forcedTextZone: TextZone =
+        slideAlign === "center" ? "bottom-center" : slideAlign === "left" ? "bottom-left" : "bottom-right";
+
+      const textZone: TextZone = forcedTextZone;
+      const isLRZone = false; // zonas laterais desativadas nessa lógica
+      const mwRatio = 0.88;
       const maxTextW = CW * mwRatio;
 
-      // Se título está na imagem, tLines fica vazio → titleBlockH = 0
-      const tLines = titleInImage
-        ? []
-        : (() => {
-            ctx.font = tFont;
-            return wrapTxt(ctx, sl.titulo, tFont, maxTextW, 2);
-          })();
+      const tLines = (() => {
+        ctx.font = tFont;
+        return wrapTxt(ctx, sl.titulo, tFont, maxTextW, 2);
+      })();
       const sLines = sl.subtitulo
         ? (() => {
             ctx.font = sFont;
@@ -788,13 +795,18 @@ export async function composeSlide(
       const CTA_PAD_R = 20 * F;
       const ctaPillW = ctaMetrics ? CTA_PAD_L + ctaMetrics.width + ICON_GAP + ICON_W + CTA_PAD_R : 0;
 
-      // Altura total do bloco (sem título se titleInImage)
       const titleBlockH = tLines.length * tLH;
       const subBlockH = sLines.length > 0 ? GAP_TS + sLines.length * sLH : 0;
       const ctaBlockH = sl.cta ? GAP_SC + CTA_H : 0;
       const blockH = titleBlockH + subBlockH + ctaBlockH;
 
+      // Geometria com align forçado pelo número do slide
       const geo = getTextGeometry(textZone, CW, CH, PAD_X, PAD_Y, blockH);
+      // Sobrescreve o align calculado pela zona com o align editorial
+      (geo as any).align = slideAlign === "left" ? "left" : slideAlign === "right" ? "right" : "center";
+      if (slideAlign === "left") (geo as any).anchorX = PAD_X;
+      if (slideAlign === "right") (geo as any).anchorX = CW - PAD_X;
+      if (slideAlign === "center") (geo as any).anchorX = CW / 2;
 
       // ── 5. RENDERIZA TÍTULO (omite se título está na imagem) ─
       let curY = geo.blockTopY + tLH;
