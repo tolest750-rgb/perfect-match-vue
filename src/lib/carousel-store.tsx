@@ -255,6 +255,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
 
   const value: CarouselState & CarouselActions = {
     faceB64, faceDataUrl, faceName,
+    layoutRefB64, layoutRefDataUrl, layoutRefName,
     style, light, fmt, res, rawText,
     slides, composedBlobs, varUrls, varStatuses,
     slideStatuses, slideSteps, isGenerating, progress, generationComplete,
