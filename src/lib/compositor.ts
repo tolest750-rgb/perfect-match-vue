@@ -133,6 +133,9 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
         ov.addColorStop(0.65, "rgba(0,0,0,0.78)");
         ov.addColorStop(1, "rgba(0,0,0,0.93)");
       }
+
+ctx.fillStyle = ov;
+ctx.fillRect(0, 0, CW, CH);
     ctx.fillStyle = ov;
     ctx.fillRect(0, 0, CW, CH);
 
