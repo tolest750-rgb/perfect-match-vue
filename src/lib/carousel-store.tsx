@@ -259,7 +259,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     style, light, fmt, res, rawText,
     slides, composedBlobs, varUrls, varStatuses,
     slideStatuses, slideSteps, isGenerating, progress, generationComplete,
-    setFace, setStyle, setLight, setFmt, setRes, setRawText,
+    setFace, setLayoutRef, setStyle, setLight, setFmt, setRes, setRawText,
     startGeneration, regenVar, getVarBlob,
   };
 

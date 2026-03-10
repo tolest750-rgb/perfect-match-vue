@@ -2,7 +2,7 @@ import type { ProcessedSlide } from "./parser";
 import { VAR_HINTS } from "./prompts";
 import { supabase } from "@/integrations/supabase/client";
 
-export async function callGemini(sl: ProcessedSlide, varIdx: number, faceB64: string): Promise<string | null> {
+export async function callGemini(sl: ProcessedSlide, varIdx: number, faceB64: string, layoutRefB64: string): Promise<string | null> {
   if (varIdx > 0) {
     await new Promise((r) => setTimeout(r, varIdx * 3000));
   }
@@ -18,11 +18,13 @@ export async function callGemini(sl: ProcessedSlide, varIdx: number, faceB64: st
 
   // Only send faceB64 when the slide actually needs face reference
   const sendFace = sl.useFaceRef && faceB64 ? faceB64 : undefined;
+  const sendLayoutRef = layoutRefB64 || undefined;
 
   const { data, error } = await supabase.functions.invoke("generate-image", {
     body: {
       prompt: promptText,
       faceB64: sendFace,
+      layoutRefB64: sendLayoutRef,
     },
   });
 

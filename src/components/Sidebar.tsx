@@ -12,6 +12,7 @@ export function Sidebar() {
   return (
     <aside className="bg-popover border-r border-border2 flex flex-col sticky top-[60px] h-[calc(100vh-60px)] overflow-y-auto shadow-[2px_0_20px_hsl(var(--primary)/0.03)]">
       <FaceUpload />
+      <LayoutRefUpload />
 
       {/* Carousel Data */}
       <div className="p-4 border-b border-border relative group">

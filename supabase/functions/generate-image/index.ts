@@ -17,14 +17,19 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const { prompt, faceB64 } = await req.json();
-
-    // ...
+    const { prompt, faceB64, layoutRefB64 } = await req.json();
 
     const content: any[] = [{ type: "text", text: prompt }];
 
-    // Face reference: apenas quando fornecida — usada somente para identidade facial
-    // O layout tipográfico é aplicado pelo compositor.ts no canvas, nunca pela IA
+    // Layout reference image: sent FIRST so the model prioritizes it for composition
+    if (layoutRefB64) {
+      content.push({
+        type: "image_url",
+        image_url: { url: `data:image/png;base64,${layoutRefB64}` },
+      });
+    }
+
+    // Face reference: only when provided — used solely for facial identity
     if (faceB64) {
       content.push({
         type: "image_url",
@@ -32,7 +37,7 @@ serve(async (req) => {
       });
     }
 
-    console.log("[generate-image] Calling Lovable AI Gateway — face ref:", !!faceB64);
+    console.log("[generate-image] Calling Lovable AI Gateway — layout ref:", !!layoutRefB64, "face ref:", !!faceB64);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -70,7 +75,18 @@ serve(async (req) => {
       });
     }
 
-    const data = await response.json();
+    const rawText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      console.error("[generate-image] Failed to parse response. Length:", rawText.length, "Tail:", rawText.slice(-100));
+      return new Response(JSON.stringify({ error: "Malformed response from AI Gateway. Please retry." }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const images = data.choices?.[0]?.message?.images;
 
     if (images && images.length > 0) {
@@ -83,7 +99,6 @@ serve(async (req) => {
       }
     }
 
-    // Check for inline content as fallback
     const textContent = data.choices?.[0]?.message?.content;
     console.log("[generate-image] No image found in response. Text:", textContent?.substring(0, 200));
 
