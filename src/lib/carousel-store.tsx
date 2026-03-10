@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from "react";
 import type { ProcessedSlide, StyleKey, LightKey, FormatKey, ResKey } from "./parser";
 import { parseSlides } from "./parser";
-import { buildPrompt, buildLayout } from "./prompts";
+import { buildPrompt, buildLayout, detectLayoutPosition } from "./prompts";
 import { callGemini } from "./gemini";
 import { composeSlide } from "./compositor";
 
@@ -93,38 +93,38 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const setVarUrl = (slideIdx: number, varIdx: number, url: string) => {
     setVarUrls((prev) => ({ ...prev, [`${slideIdx}_${varIdx}`]: url }));
   };
-
   const setVarStatus = (slideIdx: number, varIdx: number, status: "idle" | "generating" | "done" | "error") => {
     setVarStatuses((prev) => ({ ...prev, [`${slideIdx}_${varIdx}`]: status }));
   };
-
   const setSlideStatus = (idx: number, status: "idle" | "processing" | "complete" | "error") => {
     setSlideStatuses((prev) => ({ ...prev, [idx]: status }));
   };
-
   const setSlideStep = (idx: number, step: number, status: "" | "active" | "done" | "error") => {
     setSlideSteps((prev) => ({ ...prev, [`${idx}_${step}`]: status }));
   };
 
   const startGeneration = useCallback(async () => {
     if (!rawText.trim()) return;
-
     const parsed = parseSlides(rawText);
     if (!parsed.length) return;
 
     const hasFaceRef = !!faceB64Ref.current;
 
-    const processedSlides: ProcessedSlide[] = parsed.map((s) => ({
-      ...s,
-      prompt: buildPrompt(s, style, light, fmt, {
-        useFaceRef: hasFaceRef && visualMentionsPerson(s.visual ?? ""),
-      }),
-      layout: buildLayout(s, light, fmt),
-      fmt,
-      style,
-      light,
-      res,
-    }));
+    const processedSlides: ProcessedSlide[] = parsed.map((s, i) => {
+      const layoutPos = detectLayoutPosition(s, i, parsed.length);
+      return {
+        ...s,
+        prompt: buildPrompt(s, style, light, fmt, layoutPos, {
+          useFaceRef: hasFaceRef && visualMentionsPerson(s.visual ?? ""),
+        }),
+        layout: buildLayout(s, light, fmt, layoutPos),
+        layoutPosition: layoutPos,
+        fmt,
+        style,
+        light,
+        res,
+      };
+    });
 
     setSlides(processedSlides);
     setComposedBlobs({});
@@ -161,9 +161,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
               setVarStatus(i, v, "done");
               setComposedBlobs((prev) => ({ ...prev, [i]: [...newBlobs[i]] }));
             })
-            .catch(() => {
-              setVarStatus(i, v, "error");
-            });
+            .catch(() => { setVarStatus(i, v, "error"); });
         });
 
         await Promise.all(compJobs);
@@ -187,7 +185,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
       const sl = slides[slideIdx];
       if (!sl) return;
       setVarStatus(slideIdx, varIdx, "generating");
-
       try {
         const src = await callGemini(sl, varIdx, faceB64Ref.current);
         const blob = await composeSlide(src, sl, faceB64Ref.current);
@@ -207,39 +204,17 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   );
 
   const getVarBlob = useCallback(
-    (slideIdx: number, varIdx: number) => {
-      return composedBlobs[slideIdx]?.[varIdx] || null;
-    },
+    (slideIdx: number, varIdx: number) => composedBlobs[slideIdx]?.[varIdx] || null,
     [composedBlobs],
   );
 
   const value: CarouselState & CarouselActions = {
-    faceB64,
-    faceDataUrl,
-    faceName,
-    style,
-    light,
-    fmt,
-    res,
-    rawText,
-    slides,
-    composedBlobs,
-    varUrls,
-    varStatuses,
-    slideStatuses,
-    slideSteps,
-    isGenerating,
-    progress,
-    generationComplete,
-    setFace,
-    setStyle,
-    setLight,
-    setFmt,
-    setRes,
-    setRawText,
-    startGeneration,
-    regenVar,
-    getVarBlob,
+    faceB64, faceDataUrl, faceName,
+    style, light, fmt, res, rawText,
+    slides, composedBlobs, varUrls, varStatuses,
+    slideStatuses, slideSteps, isGenerating, progress, generationComplete,
+    setFace, setStyle, setLight, setFmt, setRes, setRawText,
+    startGeneration, regenVar, getVarBlob,
   };
 
   return <CarouselContext.Provider value={value}>{children}</CarouselContext.Provider>;
