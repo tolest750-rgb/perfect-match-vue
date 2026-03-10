@@ -42,7 +42,7 @@ export async function callGemini(
   }
 
   const data = await resp.json();
-  const parts = data.candidates?.[0]?.content?.parts || [];
+  const respParts = data.candidates?.[0]?.content?.parts || [];
   for (const part of parts) {
     if (part.inlineData?.data) {
       return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
