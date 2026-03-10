@@ -3,27 +3,27 @@ import type { SlideData, StyleKey, LightKey, FormatKey, LayoutPosition } from ".
 // ─── STYLE PRESETS ────────────────────────────────────────────
 const STYLES: Record<StyleKey, string> = {
   cinematic:
-    "ultra-realistic cinematic portrait photography, 85mm prime lens f/1.8, natural film grain, Hollywood color grading, photorealistic, designed for editorial text overlay — dark zones must carry the scene's ambient color temperature, never pure black",
+    "ultra-realistic cinematic portrait photography, 50mm-85mm prime lens f/1.4, extreme skin detail and pore texture, natural film grain, Hollywood color grading, photorealistic — scene designed for editorial text overlay: all shadow zones carry the scene's ambient color temperature at low intensity, never pure black voids",
   corporate:
-    "professional editorial portrait photography, studio strobe lighting, luxury business magazine aesthetic, photorealistic, scene composed for text-over-image layout — shadows are rich and directional with subtle warm or cool color contamination",
+    "professional editorial portrait photography, studio strobe key light with soft box, luxury business magazine aesthetic, photorealistic — directional shadows have warm or cool color contamination matching the scene, deep textured dark zones suitable for overlaid typography",
   futuristic:
-    "hyper-realistic sci-fi portrait, futuristic neon practical lights, cyberpunk art direction, photorealistic, neon light spill bleeds into dark background zones — colored atmospheric glow on all shadow areas ready for composited typography",
+    "hyper-realistic sci-fi portrait, futuristic neon practical lights, cyberpunk art direction, photorealistic — neon light bleeds and spills into all dark background zones, colored atmospheric glow contaminates shadows, every dark area has visible ambient hue from the scene's neon sources",
   editorial:
-    "high-end editorial portrait photography, Vogue-quality lighting, sophisticated composition, photorealistic, dark zones have layered tonal depth with ambient light interaction — designed so overlaid text feels physically lit by the scene",
+    "high-end editorial portrait photography, Vogue-quality dramatic lighting, sophisticated composition, photorealistic — dark zones have multi-layer tonal depth with ambient light interaction from scene sources, designed so overlaid text feels physically lit by the environment",
 };
 
 const LIGHTS: Record<LightKey, string> = {
   dramatic:
-    "electric blue key light from camera left, cool desaturated shadows, neon blue rim light — blue light spill bleeds across dark background surfaces at 10-20% intensity, creating a rich deep-blue atmospheric glow in shadow zones, never pure black",
-  warm: "warm amber golden key light, rich warm shadows, luxury gold color grade — amber light contamination in all dark zones, warm golden haze visible in background depth, shadows carry rich ochre undertones, deep dark-warm background with visible color temperature",
+    "electric blue key light from camera left at 45°, blue light spill bleeds across dark background surfaces at 10-20% intensity — rich deep-blue atmospheric glow in all shadow zones, neon blue rim light creating a halo on subject edges, cool desaturated mid-tones, NEVER pure black in shadows",
+  warm: "warm amber-golden key light, amber light contamination visible in all dark zones — warm golden haze in background depth, shadows carry rich ochre-sienna undertones, luxury gold color grade — NEVER pure black, always rich dark warm tones with visible color temperature",
   green:
-    "neon lime-green rim light — visible green light spill radiates onto dark background surfaces, cyberpunk green ambient glow bleeds into shadow zones at low intensity, high contrast dark background with subtle green luminescence in the darkness",
+    "neon lime-green rim light — visible green light spill radiates and bleeds onto dark background surfaces, cyberpunk green ambient glow permeates all shadow zones at low intensity, high contrast with deep dark background that still has visible green luminescence — NEVER pure black zones",
   moody:
-    "single Rembrandt key light, deep chiaroscuro shadows, noir palette — shadows are rich dark grey with warm candlelight contamination, never pure black, dramatic contrast with visible tonal texture in all dark areas",
+    "single Rembrandt key light from above-right, deep chiaroscuro — shadows are rich dark-grey with faint warm candle-light contamination, dramatic contrast, visible tonal texture in all dark areas — noir palette with depth and color in the darkness, NEVER flat pure black",
 };
 
 const NEG =
-  "text, typography, letters, words, watermark, logo, overlay text, speech bubbles, cartoon, anime, illustration, CGI, low quality, blurry, distorted face, different person, wrong identity, bad anatomy, deformed, pure black background, flat background, studio seamless backdrop, solid color background, zero-light shadow zones";
+  "text, typography, letters, words, watermark, logo, overlay text, speech bubbles, cartoon, anime, illustration, CGI, low quality, blurry, distorted face, different person, wrong identity, bad anatomy, deformed, pure black background, flat background, studio seamless backdrop, solid color background, zero-light shadow zones, washed out skin, plastic skin, airbrushed face";
 
 export const VAR_HINTS = [
   "",
@@ -177,58 +177,59 @@ export function detectLayoutPosition(sl: SlideData, slideIndex: number, totalSli
 function getCompositionInstruction(pos: LayoutPosition): string {
   const instructions: Record<LayoutPosition, string> = {
     "bottom-left": [
-      "COMPOSITION: Subject positioned in the UPPER 50% of the frame.",
-      "The LOWER 45% must transition from the scene into deep atmospheric darkness — NOT pure black.",
-      "This dark zone must carry the scene's ambient color temperature at 8-15% intensity (cool blue haze, warm amber glow, etc.).",
-      "The darkness should feel like a continuation of the scene's lighting, not a cut to black.",
-      "This lower zone is reserved exclusively for text overlay. No objects or scene details.",
-      "Subject should be slightly off-center to the right.",
+      "COMPOSITION: Subject in TIGHT CLOSE-UP or medium-close frame — face and upper body prominent, filling the upper 55% of the image.",
+      "Camera at slight downward angle for authority. Subject slightly off-center to the left.",
+      "The LOWER 45% transitions from the scene into deep atmospheric darkness with the scene's ambient color temperature visible at 8-15% — NOT pure black.",
+      "This dark-gradient zone carries the scene's colored light, like neon on wet concrete — alive with faint color.",
+      "No objects, body parts or scene details in this lower text zone.",
     ].join("\n"),
+
     "bottom-center": [
-      "COMPOSITION: Main visual element positioned in the UPPER 55% of the frame, centered.",
-      "The LOWER 40% must be a deep atmospheric gradient — rich dark with subtle ambient color from the scene's light sources.",
-      "Think wet concrete at night under neon: dark but alive with reflected color at low intensity.",
-      "This bottom zone is strictly reserved for centered text overlay.",
-      "The visual should have a natural cinematic falloff toward the bottom — light bleeds, then fades.",
+      "COMPOSITION: Main visual element prominent in the UPPER 55%, centered.",
+      "The LOWER 40% is a cinematic atmospheric fade — scene color temperature bleeds downward into deep dark at 8-15% intensity.",
+      "Bottom zone reserved for centered text overlay — must feel like the scene is fading, not cut off.",
     ].join("\n"),
+
     right: [
-      "COMPOSITION: Subject positioned on the LEFT 50% of the frame.",
-      "The RIGHT 45% must be deep atmospheric dark — NOT flat black.",
-      "The scene's key light should cast a faint directional glow or color spill into this right zone.",
-      "Dark vignetting on the right side, but with visible ambient color contamination at low opacity.",
-      "Subject should face slightly toward the right/camera.",
-      "This right zone is reserved for text overlay — atmosphere without clutter.",
+      "COMPOSITION: Subject in TIGHT CLOSE-UP filling the LEFT 52% — face large, expressive, cinematic.",
+      "The RIGHT 45% fades into atmospheric darkness carrying a faint directional glow or color spill from the scene's key light.",
+      "Dark vignetting on the right with visible ambient color contamination — the darkness has depth and color, not void.",
+      "Subject faces slightly right/toward camera with strong eye contact.",
     ].join("\n"),
+
     left: [
-      "COMPOSITION: Subject positioned on the RIGHT 50% of the frame.",
-      "The LEFT 45% must be rich atmospheric shadow — deep but with the scene's ambient color temperature visible.",
-      "A subtle light spill from the scene's source should graze this left zone, as if the light wraps around.",
-      "Dark vignetting on the left side with colored shadow contamination.",
-      "This left zone is reserved for text overlay — depth without obstruction.",
+      "COMPOSITION: Subject in TIGHT CLOSE-UP filling the RIGHT 52% — face large, expressive, cinematic.",
+      "The LEFT 45% fades into rich atmospheric shadow — the scene's ambient light wraps around into this zone at low intensity.",
+      "Dark left zone with colored shadow contamination matching the scene palette.",
     ].join("\n"),
+
     "top-center": [
-      "COMPOSITION: Subject positioned in the LOWER 55% of the frame.",
-      "The UPPER 40% must have deep cinematic atmosphere — dark but with volumetric haze or ambient glow from below.",
-      "Light from the scene should bleed upward into this dark zone at 5-10% intensity, as if illuminating smoke or air.",
-      "Subject placed from center to bottom, looking upward or forward.",
-      "This upper zone is reserved for bold text overlay — moody depth, not empty black.",
+      "COMPOSITION: Subject in TIGHT CLOSE-UP filling the LOWER 55% — face and shoulders prominent.",
+      "The UPPER 40% has deep cinematic atmosphere — dark with volumetric haze or light spill bleeding upward from the scene at 5-10% intensity.",
+      "Top zone reserved for bold text — moody depth, not empty black.",
     ].join("\n"),
+
     center: [
-      "COMPOSITION: Rich atmospheric background throughout — deep and textured, never flat.",
-      "Main visual element can be centered but subtle.",
-      "The entire frame should have layered tonal depth: distant areas fade into colored darkness.",
-      "Deep, moody, cinematic environment where even the darkest zones carry color from the scene's light sources.",
+      "COMPOSITION: Rich atmospheric environment throughout — layered tonal depth, deep and textured.",
+      "Main visual can be centered but subtle — every dark zone carries color from the scene's light sources.",
+      "Deep, moody, cinematic — the darkest shadows still have ambient color and texture.",
     ].join("\n"),
+
     "split-bottom": [
-      "COMPOSITION: Scene/visual fills the UPPER 55% of the frame.",
-      "The LOWER 45% must be a cinematic atmospheric gradient — the scene's color temperature fades downward into deep dark.",
-      "The transition from scene to dark should be smooth, with the scene's ambient light still visible as a faint glow in the dark zone.",
-      "Bottom area needs to support a two-column text layout — depth and color, not void.",
+      "COMPOSITION: Scene fills the UPPER 55%.",
+      "The LOWER 45% is a cinematic atmospheric gradient — scene color temperature fades downward into deep dark.",
+      "The transition is smooth and cinematic — ambient light still faintly visible at the bottom of the frame.",
+      "Bottom zone supports two-column text layout — depth and color, not void.",
     ].join("\n"),
   };
 
   return instructions[pos];
 }
+
+// ─── SKIN & REALISM BOOSTER ───────────────────────────────────
+// Injected in all person shots for maximum photorealism
+const SKIN_REALISM =
+  "ultra-detailed skin texture with visible pores, natural skin imperfections, subsurface scattering on skin creating translucent warmth under strong light, sharp catchlights in eyes with natural iris detail, individual hair strands visible, natural micro-expressions";
 
 // ─── BUILD PROMPT ─────────────────────────────────────────────
 export function buildPrompt(
@@ -239,7 +240,6 @@ export function buildPrompt(
   layoutPos: LayoutPosition,
   options?: { useFaceRef?: boolean },
 ) {
-  // ← useFaceRef e fmtHint declarados DENTRO da função
   const useFaceRef = options?.useFaceRef ?? false;
 
   const fmtHint: Record<FormatKey, string> = {
@@ -248,19 +248,18 @@ export function buildPrompt(
     "1:1": "square 1:1 format (1080×1080px)",
   };
 
-  // Face reference: só incluída quando o VISUAL menciona uma pessoa
-  // e o slide foi marcado para usar face ref
   const faceInstruction = useFaceRef
     ? [
         "FACE REFERENCE IMAGE ATTACHED:",
-        "Use it ONLY to extract the facial identity of the person.",
-        "DO NOT reproduce, paste, composite or reuse the reference photo background, clothing, pose or lighting.",
-        "Study ONLY the unique facial features: face shape, eye color/shape, skin tone, nose, lips, jawline, brow, hair.",
-        "GENERATE a completely new photograph of this same person FROM SCRATCH, naturally in the scene described below.",
-        "The face must be unmistakably the same individual. Zero influence from the reference except facial identity.",
+        "Use it ONLY to extract the facial identity — face shape, eye color/shape, skin tone, nose, lips, jawline, brow, hair.",
+        "DO NOT reproduce the reference photo's background, clothing, pose or lighting.",
+        "GENERATE a completely new photograph of this same person FROM SCRATCH, naturally embedded in the scene below.",
+        "The face must be unmistakably the same individual with zero influence from the reference except facial identity.",
       ].join(" ")
     : "";
 
+  const hasPerson = visualHasPerson(sl.visual ?? "");
+  const skinBoost = hasPerson ? SKIN_REALISM : "";
   const compositionInstruction = getCompositionInstruction(layoutPos);
   const textElementsHint = buildTextElementsHint(sl, layoutPos);
 
@@ -272,13 +271,14 @@ export function buildPrompt(
     sl.visual,
     LIGHTS[light],
     sl.design || "",
+    skinBoost,
     "",
     "COMPOSITION RULES:",
     compositionInstruction,
     textElementsHint,
     "",
-    "QUALITY:",
-    "professional commercial photography, dramatic atmospheric depth, cinematic bokeh, subject in sharp focus, RICH TEXTURED SHADOWS with ambient color contamination — all dark zones carry the scene's color temperature at low intensity, volumetric light spill on background surfaces, deep shadows with visible color tones never pure black, scene lighting creates natural editorial gradients where composited typography will feel physically embedded and lit by the environment, high production value",
+    "QUALITY & ATMOSPHERE:",
+    "professional commercial photography, dramatic atmospheric depth, cinematic bokeh with creamy out-of-focus areas, subject in tack-sharp focus, RICH TEXTURED SHADOWS with ambient color contamination — all dark zones carry the scene's color temperature at 8-15% intensity, volumetric light spill on background surfaces and skin, colored light interaction visible on all dark surfaces, deep shadows with visible color tones NEVER pure black, scene lighting creates natural editorial gradients where composited typography will feel physically embedded and lit by the environment, high production value, Hasselblad medium format quality",
   ]
     .filter((s) => s !== undefined && s !== null)
     .map((s) => s.trim())
@@ -308,10 +308,11 @@ function buildTextElementsHint(sl: SlideData, pos: LayoutPosition): string {
 
   return [
     `The following text elements will be composited over the image: ${textElements.join(", ")}.`,
-    `These elements will be placed in ${zoneMap[pos]}.`,
-    `That zone must be cinematically dark but NOT pure black — use deep atmospheric gradients with the scene's ambient color temperature subtly present (5-15% intensity). The zone should feel like the scene's light is fading, not cut off. This colored darkness allows composited text to appear physically lit by the scene — as if the typography itself is catching light from the environment.`,
-    "Do NOT place the subject's body, important props, or scene details in this text zone.",
-    "Think of it as a photographer composing the shot to leave space for a magazine text overlay.",
+    `These will be placed in ${zoneMap[pos]}.`,
+    `CRITICAL: That zone must be cinematically dark but NOT pure black — use deep atmospheric gradients with the scene's ambient color temperature subtly present at 8-15% intensity.`,
+    `Think of it as a photographer leaving space for magazine text: the darkness is alive with a faint colored glow from the scene's light sources — like neon reflecting off dark wet pavement.`,
+    `This allows composited typography to appear physically lit by the scene — as if the text itself catches light from the environment.`,
+    `Do NOT place the subject's body, props, or scene details in this text zone.`,
   ].join("\n");
 }
 
