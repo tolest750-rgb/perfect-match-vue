@@ -309,57 +309,32 @@ function buildTextElementsHint(sl: SlideData, pos: LayoutPosition): string {
 }
 
 // ─── BUILD LAYOUT (for the compositor) ────────────────────────
-export function buildLayout(sl: SlideData, light: LightKey, fmt: FormatKey, layoutPos: LayoutPosition) {
+export function buildLayout(
+  sl: SlideData,
+  light: LightKey,
+  fmt: FormatKey,
+  layoutPos: LayoutPosition,
+): {
+  accent: string;
+  layoutPos: LayoutPosition;
+  slideNum: string;
+  titulo: string;
+  subtitulo: string;
+  cta: string;
+} {
   const ACC: Record<LightKey, string> = {
     dramatic: "#00b4ff",
     warm: "#f5c842",
     green: "#c8ff00",
     moody: "#ffffff",
   };
-  const DIM: Record<FormatKey, string> = {
-    "4:5": "1080×1350px",
-    "9:16": "1080×1920px",
-    "1:1": "1080×1080px",
+
+  return {
+    accent: ACC[light],
+    layoutPos,
+    slideNum: sl.num,
+    titulo: sl.titulo,
+    subtitulo: sl.subtitulo,
+    cta: sl.cta,
   };
-  const accent = ACC[light];
-
-  return `LAYOUT — SLIDE ${sl.num} | ${DIM[fmt]} | Position: ${layoutPos}
-════════════════════════════════════
-REFERÊNCIA ESTÉTICA: editorial bold, neon accent, dark background
-Inspiração: carrossel de marca pessoal estilo agência premium brasileira
-
-ACCENT COLOR: ${accent}
-LAYOUT POSITION: ${layoutPos}
-
-── HIERARQUIA TIPOGRÁFICA ──────────
-
-① NÚMERO DO SLIDE [${sl.num}]
-  Font: Bricolage Grotesque 700 | 13px | tracking: 2px
-  Cor: rgba(255,255,255,0.38)
-
-② TÍTULO: "${sl.titulo}"
-  Font: Bricolage Grotesque 900 Italic | 44–52px | max 3 linhas | line-height: 1.08
-  Cor: ${accent} (cor de acento — NUNCA branco)
-  Uppercase
-
-③ SUBTÍTULO: "${sl.subtitulo}"
-  Font: Bricolage Grotesque 400 | 18px | line-height: 1.55
-  Cor: rgba(255,255,255,0.90)
-  Palavras-chave em bold branco puro
-${
-  sl.cta
-    ? `
-④ CTA: "${sl.cta}"
-  Font: Bricolage Grotesque 700 | 12px | uppercase | tracking: 1.5px
-  Background: ${accent} | Cor texto: #000000
-  Padding: 12px 22px | border-radius: 8px`
-    : ""
-}
-
-── REGRAS ─────────────────────────
-- Título SEMPRE em ${accent} — nunca branco
-- Subtítulo branco com palavras-chave em bold
-- Hierarquia visual clara: título > subtítulo > CTA
-- Fundo da zona de texto escuro o suficiente para legibilidade
-════════════════════════════════════`;
 }
