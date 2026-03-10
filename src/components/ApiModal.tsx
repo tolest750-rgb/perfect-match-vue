@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useCarousel } from '@/lib/carousel-store';
 
 export function ApiModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { apiKey, demo, setApiKey, setDemo, testApi, saveConfig } = useCarousel();
+  const { demo, setDemo, testApi, saveConfig } = useCarousel();
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
 
@@ -41,39 +41,24 @@ export function ApiModal({ open, onClose }: { open: boolean; onClose: () => void
         {/* Body */}
         <div className="p-4 flex flex-col gap-3">
           <div className="bg-card border border-border2 rounded-sm p-2.5 font-mono text-[9px] leading-relaxed text-muted-foreground tracking-[0.3px]">
-            Modelo: <strong className="text-neon2">gemini-3-pro-image-preview</strong><br />
-            Endpoint: <code className="bg-card-2 border border-border2 px-1 py-0.5 rounded-sm font-mono text-[9px] text-neon2">generativelanguage.googleapis.com/v1beta</code><br /><br />
-            O <strong className="text-neon2">rosto de referência</strong> é enviado como <code className="bg-card-2 border border-border2 px-1 py-0.5 rounded-sm font-mono text-[9px] text-neon2">inline_data</code> (base64 JPEG). São feitas <strong className="text-neon2">4 chamadas paralelas</strong> por slide.
+            Modelo: <strong className="text-neon2">Nano Banana Pro</strong> (gemini-3-pro-image-preview)<br />
+            Endpoint: <code className="bg-card-2 border border-border2 px-1 py-0.5 rounded-sm font-mono text-[9px] text-neon2">Lovable AI Gateway</code><br /><br />
+            A API é gerenciada automaticamente pelo <strong className="text-neon2">Lovable Cloud</strong>. Não é necessário API key externa. São feitas <strong className="text-neon2">4 chamadas</strong> por slide (com stagger).
           </div>
 
-          <div>
-            <label className="block font-mono text-[9px] tracking-[1.5px] uppercase text-muted-foreground mb-1">
-              GOOGLE AI STUDIO API KEY <span className="text-primary">*</span>
-            </label>
-            <div className="flex gap-1.5">
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="AIzaSy..."
-                className="flex-1 bg-card border border-border2 rounded-sm text-foreground font-mono text-[11px] py-2 px-3 outline-none transition-all duration-200 caret-primary focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary)/0.2),0_0_16px_hsl(var(--primary)/0.06),inset_0_0_8px_hsl(var(--primary)/0.04)] focus:text-neon2 placeholder:text-muted-foreground"
-              />
-              <button
-                onClick={handleTest}
-                disabled={testing}
-                className="bg-card border border-border2 rounded-sm text-foreground font-mono text-[9px] tracking-[1px] px-3 cursor-pointer whitespace-nowrap transition-all duration-200 hover:border-primary hover:text-primary hover:shadow-[0_0_8px_hsl(var(--neon-dim)/0.07)]"
-              >
-                {testing ? '...' : 'TEST'}
-              </button>
-            </div>
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={handleTest}
+              disabled={testing}
+              className="bg-card border border-border2 rounded-sm text-foreground font-mono text-[9px] tracking-[1px] px-4 py-2 cursor-pointer whitespace-nowrap transition-all duration-200 hover:border-primary hover:text-primary hover:shadow-[0_0_8px_hsl(var(--neon-dim)/0.07)]"
+            >
+              {testing ? 'TESTING...' : '⚡ TEST CONNECTION'}
+            </button>
             {testResult && (
-              <div className={`font-mono text-[8px] font-bold mt-1 px-2 py-1 rounded-sm tracking-[0.5px] ${testResult.ok ? 'bg-primary/[0.06] text-primary border border-primary/[0.15]' : 'bg-destructive/[0.06] text-destructive border border-destructive/[0.15]'}`}>
+              <div className={`font-mono text-[8px] font-bold px-2 py-1 rounded-sm tracking-[0.5px] ${testResult.ok ? 'bg-primary/[0.06] text-primary border border-primary/[0.15]' : 'bg-destructive/[0.06] text-destructive border border-destructive/[0.15]'}`}>
                 &gt;&gt; {testResult.ok ? 'STATUS: ' : 'ERROR: '}{testResult.message}
               </div>
             )}
-            <div className="font-mono text-[8px] text-muted-foreground mt-1 tracking-[0.5px]">
-              &gt;&gt; <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">aistudio.google.com/app/apikey</a>
-            </div>
           </div>
 
           <div>

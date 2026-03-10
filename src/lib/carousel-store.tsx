@@ -4,6 +4,7 @@ import { parseSlides } from "./parser";
 import { buildPrompt, buildLayout } from "./prompts";
 import { callGemini } from "./gemini";
 import { composeSlide } from "./compositor";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CarouselState {
   faceB64: string;
@@ -97,27 +98,18 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   }, [apiKey, demo]);
 
   const testApi = useCallback(async (): Promise<{ ok: boolean; message: string }> => {
-    if (!apiKey) return { ok: false, message: "API_KEY_REQUIRED" };
     try {
-      const r = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: "Respond with only the word: OK" }] }],
-            generationConfig: { responseModalities: ["TEXT"] },
-          }),
-          signal: AbortSignal.timeout(15000),
-        },
-      );
-      if (r.ok) return { ok: true, message: "CONNECTED // GEMINI_ONLINE" };
-      const d = await r.json().catch(() => ({}));
-      return { ok: false, message: d.error?.message || "HTTP " + r.status };
+      const { data, error } = await supabase.functions.invoke('generate-image', {
+        body: { prompt: 'Generate a simple test image of a blue circle on white background.' },
+      });
+      if (error) return { ok: false, message: error.message || 'Edge function error' };
+      if (data?.error) return { ok: false, message: data.error };
+      if (data?.imageUrl) return { ok: true, message: "CONNECTED // NANO_BANANA_PRO_ONLINE" };
+      return { ok: false, message: "Unexpected response" };
     } catch (e: any) {
       return { ok: false, message: "NETWORK_ERROR: " + e.message };
     }
-  }, [apiKey]);
+  }, []);
 
   const setVarUrl = (slideIdx: number, varIdx: number, url: string) => {
     setVarUrls((prev) => ({ ...prev, [`${slideIdx}_${varIdx}`]: url }));
@@ -137,7 +129,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
 
   const startGeneration = useCallback(async () => {
     if (!rawText.trim()) return;
-    if (!apiKey && !demo) return;
 
     const parsed = parseSlides(rawText);
     if (!parsed.length) return;
@@ -242,7 +233,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
 
   const regenVar = useCallback(
     async (slideIdx: number, varIdx: number) => {
-      if (!apiKey && !demo) return;
+      if (!demo) return;
       const sl = slides[slideIdx];
       if (!sl) return;
       setVarStatus(slideIdx, varIdx, "generating");
