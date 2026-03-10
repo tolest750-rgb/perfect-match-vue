@@ -20,13 +20,13 @@ const LIGHTS: Record<LightKey, string> = {
 };
 
 const COMPS: Record<FormatKey, string> = {
-  "4:5": "vertical 4:5 portrait, subject in upper 60% of frame, lower area with natural dark falloff for compositing",
-  "9:16": "vertical 9:16 tall portrait, subject in upper 2/3, lower quarter fading to deep shadow",
-  "1:1": "square 1:1 composition, centered subject, natural dark gradient at bottom edge",
+  "4:5": "vertical 4:5 portrait composition, subject positioned in the upper 40% of frame, the entire lower 40% must be a clean dark gradient with NO objects, NO details, NO scenery — this area is reserved exclusively for text overlay",
+  "9:16": "vertical 9:16 tall portrait composition, subject positioned in upper third of frame, the lower 50% must be a clean dark empty area with smooth gradient falloff — this zone is strictly reserved for typography overlay, keep it completely clear of any subjects or scene elements",
+  "1:1": "square 1:1 composition, subject positioned in upper-right quadrant, the lower-left area must be clean dark negative space reserved for text overlay",
 };
 
 const NEG =
-  "text, typography, letters, words, watermark, logo, overlay text, speech bubbles, cartoon, anime, illustration, CGI, low quality, blurry, distorted face, different person, wrong identity, bad anatomy, deformed";
+  "text, typography, letters, words, watermark, logo, overlay text, speech bubbles, cartoon, anime, illustration, CGI, low quality, blurry, distorted face, different person, wrong identity, bad anatomy, deformed, objects in lower portion of image, busy background in text area, clutter in bottom half";
 
 export const VAR_HINTS = [
   "",
@@ -36,33 +36,11 @@ export const VAR_HINTS = [
 ];
 
 const PERSON_KEYWORDS = [
-  "pessoa",
-  "homem",
-  "mulher",
-  "menino",
-  "menina",
-  "criança",
-  "executivo",
-  "empresário",
-  "empresária",
-  "líder",
-  "atleta",
-  "médico",
-  "profissional",
-  "founder",
-  "ceo",
-  "palestrante",
-  "especialista",
-  "autor",
-  "coach",
-  "person",
-  "man",
-  "woman",
-  "boy",
-  "girl",
-  "human",
-  "speaker",
-  "expert",
+  "pessoa", "homem", "mulher", "menino", "menina", "criança",
+  "executivo", "empresário", "empresária", "líder", "atleta",
+  "médico", "profissional", "founder", "ceo", "palestrante",
+  "especialista", "autor", "coach", "person", "man", "woman",
+  "boy", "girl", "human", "speaker", "expert",
 ];
 
 function visualHasPerson(visual: string): boolean {
@@ -81,31 +59,72 @@ export function buildPrompt(
 
   const faceInstruction = shouldUseFaceRef
     ? [
-        "FACE REFERENCE — HIGHEST PRIORITY INSTRUCTION:",
-        "A reference photo of a real person is provided as the first image.",
-        "Your task is NOT to paste this photo into the scene.",
-        "Instead: carefully study the persons unique facial anatomy — face shape, eye color and shape, skin tone, nose structure, lip definition, jawline, brow line, and hair.",
-        "Then GENERATE this exact person from scratch, fully embedded in the scene described below.",
-        "The person must be wearing the described outfit, in the described setting, with the described mood — but their face must be unmistakably the same individual from the reference.",
-        "The result should look like a brand-new high-quality photograph of that real person naturally placed in this new context.",
-        "Facial identity is mandatory. Do not alter, idealize, or blend their features with another person.",
-      ].join(" ")
+        "CRITICAL INSTRUCTION — FACE REFERENCE USAGE:",
+        "A small reference photo is attached. This photo is ONLY for extracting the person's facial identity.",
+        "DO NOT reproduce, paste, overlay, or composite this reference photo into the scene.",
+        "DO NOT use the reference photo's background, clothing, lighting, pose, or composition.",
+        "Instead: study ONLY the person's unique facial features — face shape, eye color/shape, skin tone, nose, lips, jawline, brow, and hair style/color.",
+        "Then GENERATE a completely new photograph of this same person FROM SCRATCH, naturally placed in the scene described below.",
+        "The person must wear the described outfit, in the described setting and pose — but their face MUST be unmistakably the same individual.",
+        "The reference photo should have ZERO influence on the final image except for facial identity.",
+      ].join("\n")
     : "";
+
+  // Layout-aware composition instruction
+  const layoutInstruction = buildLayoutCompositionHint(sl, fmt);
 
   const pos = [
     faceInstruction,
+    "SCENE DESCRIPTION:",
     STYLES[style],
     sl.visual,
     LIGHTS[light],
     sl.design || "",
+    "",
+    "COMPOSITION & LAYOUT RULES:",
     COMPS[fmt],
-    "professional commercial photography quality, dramatic atmospheric depth, cinematic bokeh, subject in sharp focus, dark rich background, high production value",
+    layoutInstruction,
+    "",
+    "QUALITY:",
+    "professional commercial photography, dramatic atmospheric depth, cinematic bokeh, subject in sharp focus, dark rich background, high production value",
   ]
-    .filter(Boolean)
+    .filter((s) => s !== undefined && s !== null)
     .map((s) => s.trim())
-    .join(". ");
+    .filter(Boolean)
+    .join("\n");
 
   return { pos, neg: NEG };
+}
+
+function buildLayoutCompositionHint(sl: SlideData, fmt: FormatKey): string {
+  const hasTitle = !!sl.titulo;
+  const hasSubtitle = !!sl.subtitulo;
+  const hasCta = !!sl.cta;
+
+  const textElements: string[] = [];
+  if (hasTitle) textElements.push(`a large title ("${sl.titulo.substring(0, 30)}...")`);
+  if (hasSubtitle) textElements.push("a subtitle line");
+  if (hasCta) textElements.push("a call-to-action button");
+
+  const textDesc = textElements.length > 0
+    ? `The following text elements will be composited over the image: ${textElements.join(", ")}.`
+    : "";
+
+  const zoneMap: Record<FormatKey, string> = {
+    "4:5": "the bottom 40% of the frame",
+    "9:16": "the bottom 50% of the frame",
+    "1:1": "the bottom-left 40% of the frame",
+  };
+
+  return [
+    "TYPOGRAPHY SAFE ZONE — MANDATORY:",
+    textDesc,
+    `These text elements will be placed in ${zoneMap[fmt]}.`,
+    `Therefore, ${zoneMap[fmt]} MUST be kept completely clean — use only a smooth dark gradient or deep shadow falloff.`,
+    "Do NOT place the subject's body, hands, important props, or any scene details in this text zone.",
+    "The subject should be positioned ABOVE and AWAY from this reserved area.",
+    "Think of it as a photographer deliberately composing the shot to leave space for a magazine text overlay.",
+  ].join("\n");
 }
 
 export function buildLayout(sl: SlideData, light: LightKey, fmt: FormatKey) {
