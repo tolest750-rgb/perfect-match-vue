@@ -65,6 +65,11 @@ async function ensureFont() {
   }
 }
 
+function hexToRgb(hex: string): string | null {
+  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return r ? `${parseInt(r[1],16)},${parseInt(r[2],16)},${parseInt(r[3],16)}` : null;
+}
+
 export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, faceB64: string): Promise<Blob> {
   await ensureFont();
 
@@ -107,28 +112,49 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
       if (layoutPos === "right") {
         ov = ctx.createLinearGradient(CW * 0.42, 0, CW, 0);
         ov.addColorStop(0, "rgba(0,0,0,0)");
-        ov.addColorStop(0.25, "rgba(0,0,0,0.50)");
-        ov.addColorStop(0.65, "rgba(0,0,0,0.88)");
-        ov.addColorStop(1, "rgba(0,0,0,0.97)");
+        ov.addColorStop(0.25, "rgba(0,0,0,0.45)");
+        ov.addColorStop(0.65, "rgba(0,0,0,0.82)");
+        ov.addColorStop(1, "rgba(0,0,0,0.93)");
       } else if (layoutPos === "left") {
         ov = ctx.createLinearGradient(CW * 0.58, 0, 0, 0);
         ov.addColorStop(0, "rgba(0,0,0,0)");
-        ov.addColorStop(0.25, "rgba(0,0,0,0.50)");
-        ov.addColorStop(0.65, "rgba(0,0,0,0.88)");
-        ov.addColorStop(1, "rgba(0,0,0,0.97)");
+        ov.addColorStop(0.25, "rgba(0,0,0,0.45)");
+        ov.addColorStop(0.65, "rgba(0,0,0,0.82)");
+        ov.addColorStop(1, "rgba(0,0,0,0.93)");
       } else if (layoutPos === "top-center") {
         ov = ctx.createLinearGradient(0, 0, 0, CH * 0.52);
         ov.addColorStop(0, "rgba(0,0,0,0.97)");
         ov.addColorStop(0.45, "rgba(0,0,0,0.60)");
         ov.addColorStop(1, "rgba(0,0,0,0)");
       } else {
-        // bottom-left / bottom-center / split-bottom / center
         ov = ctx.createLinearGradient(0, CH * 0.25, 0, CH);
         ov.addColorStop(0, "rgba(0,0,0,0)");
-        ov.addColorStop(0.3, "rgba(0,0,0,0.40)");
-        ov.addColorStop(0.65, "rgba(0,0,0,0.80)");
-        ov.addColorStop(1, "rgba(0,0,0,0.97)");
+        ov.addColorStop(0.3, "rgba(0,0,0,0.38)");
+        ov.addColorStop(0.65, "rgba(0,0,0,0.78)");
+        ov.addColorStop(1, "rgba(0,0,0,0.93)");
       }
+    ctx.fillStyle = ov;
+    ctx.fillRect(0, 0, CW, CH);
+
+// Camada de cor ambiente — accent contamina o gradiente escuro
+const accentRgb = hexToRgb(accent);
+if (accentRgb) {
+  let accentOv: CanvasGradient;
+  if (layoutPos === "right") {
+    accentOv = ctx.createLinearGradient(CW * 0.54, 0, CW, 0);
+  } else if (layoutPos === "left") {
+    accentOv = ctx.createLinearGradient(CW * 0.46, 0, 0, 0);
+  } else if (layoutPos === "top-center") {
+    accentOv = ctx.createLinearGradient(0, 0, 0, CH * 0.45);
+  } else {
+    accentOv = ctx.createLinearGradient(0, CH * 0.45, 0, CH);
+  }
+  accentOv.addColorStop(0, `rgba(${accentRgb},0)`);
+  accentOv.addColorStop(0.6, `rgba(${accentRgb},0.06)`);
+  accentOv.addColorStop(1, `rgba(${accentRgb},0.13)`);
+  ctx.fillStyle = accentOv;
+  ctx.fillRect(0, 0, CW, CH);
+}
       ctx.fillStyle = ov;
       ctx.fillRect(0, 0, CW, CH);
 
@@ -162,47 +188,100 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
       }
 
       // ── Número do slide — topo esquerdo ─────────────────────
-      ctx.font = numFont;
-      ctx.fillStyle = "rgba(255,255,255,0.38)";
-      ctx.textBaseline = "top";
-      ctx.fillText(sl.num, PAD_X, PAD_Y);
-      ctx.textBaseline = "alphabetic";
-
-      // ── Título: branco em todas as linhas, EXCETO a última ──
-      // Última linha recebe a cor de acento (lime, blue, gold…)
       ctx.font = tFont;
       tLines.forEach((ln, idx) => {
-        ctx.fillStyle = idx === tLines.length - 1 ? accent : "#ffffff";
+        const isAccentLine = idx === tLines.length - 1;
+
+      if (isAccentLine) {
+        // Glow difuso por baixo
+        ctx.save();
+        ctx.shadowColor = accent;
+        ctx.shadowBlur = 38 * F;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 4 * F;
+        ctx.fillStyle = accent;
         ctx.fillText(ln, textX, ty);
-        ty += tLH;
-      });
+        ctx.restore();
+    
+        // Segunda passada sem shadow — garante nitidez
+        ctx.save();
+        ctx.fillStyle = accent;
+        ctx.fillText(ln, textX, ty);
+        ctx.restore();
+      } else {
+        // Linhas brancas: drop shadow sutil direcional
+        ctx.save();
+        ctx.shadowColor = "rgba(0,0,0,0.75)";
+        ctx.shadowBlur = 18 * F;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 3 * F;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(ln, textX, ty);
+        ctx.restore();
+      }
+
+  ty += tLH;
+});
 
       // ── Subtítulo — branco suave ─────────────────────────────
       if (sLines.length) {
         ty += GAP_TS;
         ctx.font = sFont;
-        ctx.fillStyle = "rgba(255,255,255,0.85)";
         sLines.forEach((ln) => {
+          ctx.save();
+          ctx.shadowColor = "rgba(0,0,0,0.65)";
+          ctx.shadowBlur = 12 * F;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 2 * F;
+          ctx.fillStyle = "rgba(255,255,255,0.82)";
           ctx.fillText(ln, textX, ty);
+          ctx.restore();
           ty += sLH;
         });
       }
 
       // ── CTA — pílula sólida accent, texto preto ──────────────
-      if (sl.cta) {
-        ty += CTA_GAP;
-        ctx.font = ctaFont;
-        const ctaW = ctx.measureText(sl.cta).width + 40 * F;
-        const ctaH = 38 * F;
-        const cx = textX;
-        const cy = ty - ctaH * 0.82;
-        ctx.fillStyle = accent; // sólido, sem gradiente
-        rrect(ctx, cx, cy, ctaW, ctaH, 22 * F);
-        ctx.fill();
-        ctx.fillStyle = "#000000";
-        ctx.fillText(sl.cta, cx + 20 * F, cy + ctaH * 0.65);
-      }
-    };
+     if (sl.cta) {
+      ty += CTA_GAP;
+      ctx.font = ctaFont;
+      const ctaW = ctx.measureText(sl.cta).width + 40 * F;
+      const ctaH = 38 * F;
+      const cx = textX;
+      const cy = ty - ctaH * 0.82;
+    
+      // Sombra projetada do pill
+      ctx.save();
+      ctx.shadowColor = accent;
+      ctx.shadowBlur = 28 * F;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 6 * F;
+      ctx.fillStyle = accent;
+      rrect(ctx, cx, cy, ctaW, ctaH, 22 * F);
+      ctx.fill();
+      ctx.restore();
+    
+      // Fill limpo por cima (sem shadow — evita borrão no texto interno)
+      ctx.fillStyle = accent;
+      rrect(ctx, cx, cy, ctaW, ctaH, 22 * F);
+      ctx.fill();
+    
+      // Highlight de luz no topo do pill (reflexo)
+      const pillHL = ctx.createLinearGradient(cx, cy, cx, cy + ctaH * 0.5);
+      pillHL.addColorStop(0, "rgba(255,255,255,0.22)");
+      pillHL.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = pillHL;
+      rrect(ctx, cx, cy, ctaW, ctaH * 0.5, 22 * F);
+      ctx.fill();
+    
+      // Texto do CTA
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.4)";
+      ctx.shadowBlur = 4 * F;
+      ctx.shadowOffsetY = 1 * F;
+      ctx.fillStyle = "#000000";
+      ctx.fillText(sl.cta, cx + 20 * F, cy + ctaH * 0.65);
+      ctx.restore();
+    }
 
     // ── Fallback: sem imagem da IA ───────────────────────────────
     const drawFallback = () => {
