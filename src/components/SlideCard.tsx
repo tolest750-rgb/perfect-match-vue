@@ -8,8 +8,48 @@ interface SlideCardProps {
   onImageClick: (src: string) => void;
 }
 
+async function upscaleBlob(blob: Blob): Promise<Blob> {
+  try {
+    const b64 = await new Promise<string>((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res((r.result as string).split(",")[1]);
+      r.onerror = rej;
+      r.readAsDataURL(blob);
+    });
+    const startRes = await fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Token ${import.meta.env.VITE_REPLICATE_API_TOKEN}`,
+      },
+      body: JSON.stringify({
+        version: "42fed1c4974146d4d2414e2be2c5277c7fcf05fcc3a73abf41610695738c1d7b",
+        input: { image: `data:image/png;base64,${b64}`, scale: 4, face_enhance: true },
+      }),
+    });
+    if (!startRes.ok) return blob;
+    const pred = await startRes.json();
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const poll = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, {
+        headers: { Authorization: `Token ${import.meta.env.VITE_REPLICATE_API_TOKEN}` },
+      });
+      const data = await poll.json();
+      if (data.status === "succeeded") {
+        const imgRes = await fetch(data.output);
+        return imgRes.ok ? await imgRes.blob() : blob;
+      }
+      if (data.status === "failed") return blob;
+    }
+    return blob;
+  } catch {
+    return blob;
+  }
+}
+
 export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
   const [expanded, setExpanded] = useState(true);
+  const [enhancing, setEnhancing] = useState<Record<string, boolean>>({});
   const { varUrls, varStatuses, slideStatuses, slideSteps, regenVar, getVarBlob, faceDataUrl } = useCarousel();
 
   const status = slideStatuses[index] || "idle";
@@ -35,13 +75,42 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
   const fmtClass =
     { "4:5": "aspect-[4/5]", "9:16": "aspect-[9/16]", "1:1": "aspect-square" }[slide.fmt] || "aspect-[4/5]";
 
-  const dlOne = (varIdx: number) => {
+  const dlOne = async (varIdx: number) => {
     const blob = getVarBlob(index, varIdx);
     if (!blob) return;
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `slide-${String(slide.n).padStart(2, "0")}-v${varIdx + 1}.png`;
-    a.click();
+    const key = `${index}_${varIdx}`;
+    setEnhancing(p => ({ ...p, [key]: true }));
+    try {
+      const enhanced = await upscaleBlob(blob);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(enhanced);
+      a.download = `slide-${String(slide.n).padStart(2, "0")}-v${varIdx + 1}-4K.png`;
+      a.click();
+    } finally {
+      setEnhancing(p => ({ ...p, [key]: false }));
+    }
+  };
+
+  const dlAllZip = async () => {
+    const { default: JSZip } = await import("jszip");
+    const zip = new JSZip();
+    const folder = zip.folder(`carousel-sl${String(slide.n).padStart(2, "0")}`)!;
+    setEnhancing(p => ({ ...p, [`${index}_zip`]: true }));
+    try {
+      await Promise.all([0, 1, 2, 3].map(async v => {
+        const blob = getVarBlob(index, v);
+        if (!blob) return;
+        const enhanced = await upscaleBlob(blob);
+        folder.file(`slide-${String(slide.n).padStart(2, "0")}-v${v + 1}-4K.png`, enhanced);
+      }));
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(zipBlob);
+      a.download = `carousel-slide-${String(slide.n).padStart(2, "0")}-4K.zip`;
+      a.click();
+    } finally {
+      setEnhancing(p => ({ ...p, [`${index}_zip`]: false }));
+    }
   };
 
   return (
@@ -112,6 +181,17 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
             >
               VARIAÇÕES_GERADAS // {slide.num}
             </div>
+            </div>
+
+            {[0, 1, 2, 3].some(v => !!varUrls[`${index}_${v}`]) && (
+              <button
+                onClick={dlAllZip}
+                disabled={enhancing[`${index}_zip`]}
+                className="w-full mt-2 bg-transparent border border-primary/40 rounded-sm text-primary font-mono text-[9px] tracking-[1.5px] uppercase py-1.5 cursor-pointer transition-all duration-200 hover:bg-primary/[0.06] hover:border-primary hover:shadow-[0_0_12px_hsl(var(--primary)/0.15)] disabled:opacity-40"
+              >
+                {enhancing[`${index}_zip`] ? "↑ APLICANDO 4K UPSCALE..." : "▼ BAIXAR TODAS · ZIP · 4K"}
+              </button>
+          </div>
             <div className="grid grid-cols-4 gap-2 max-[1200px]:grid-cols-2">
               {[0, 1, 2, 3].map((v) => {
                 const key = `${index}_${v}`;
@@ -163,11 +243,12 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
                     </div>
                     {url && (
                       <div className="flex gap-0.5 p-1">
-                        <button
+                      <button
                           onClick={() => dlOne(v)}
-                          className="flex-1 bg-card border border-border rounded-sm text-muted-foreground font-mono text-[8px] tracking-[0.5px] py-1 cursor-pointer transition-all duration-200 text-center hover:bg-primary/[0.06] hover:border-primary hover:text-primary hover:shadow-[0_0_6px_hsl(var(--neon-dim)/0.07)]"
+                          disabled={enhancing[`${index}_${v}`]}
+                          className="flex-1 bg-card border border-border rounded-sm text-muted-foreground font-mono text-[8px] tracking-[0.5px] py-1 cursor-pointer transition-all duration-200 text-center hover:bg-primary/[0.06] hover:border-primary hover:text-primary hover:shadow-[0_0_6px_hsl(var(--neon-dim)/0.07)] disabled:opacity-40"
                         >
-                          ▼ PNG
+                          {enhancing[`${index}_${v}`] ? "↑ 4K..." : "▼ 4K"}
                         </button>
                         <button
                           onClick={() => regenVar(index, v)}

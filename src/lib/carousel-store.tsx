@@ -8,6 +8,30 @@ import type { AILayout } from "./compositor";
 import { callGemini } from "./gemini";
 
 // ─── TYPES ────────────────────────────────────────────────────
+export interface HistoryEntry {
+  id: string;
+  createdAt: string;
+  rawText: string;
+  style: StyleKey;
+  light: LightKey;
+  fmt: FormatKey;
+  slideCount: number;
+  thumbUrl?: string;
+}
+
+export interface FacePreset {
+  id: string;
+  name: string;
+  dataUrl: string;
+  b64: string;
+}
+
+export interface LayoutPreset {
+  id: string;
+  name: string;
+  dataUrl: string;
+}
+
 interface CarouselState {
   faceB64: string;
   faceDataUrl: string;
@@ -23,11 +47,15 @@ interface CarouselState {
   varStatuses: Record<string, "idle" | "generating" | "done" | "error">;
   slideStatuses: Record<number, "idle" | "processing" | "complete" | "error">;
   isGenerating: boolean;
+  isStopping: boolean;
   progress: { done: number; total: number };
   generationComplete: boolean;
   layoutRefDataUrl: string;
   layoutRefName: string;
   slideSteps: Record<number, string[]>;
+  history: HistoryEntry[];
+  facePresets: FacePreset[];
+  layoutPresets: LayoutPreset[];
 }
 
 interface CarouselActions {
@@ -39,8 +67,17 @@ interface CarouselActions {
   setRawText: (t: string) => void;
   setLayoutRef: (file: File) => void;
   startGeneration: () => Promise<void>;
+  stopGeneration: () => void;
   regenVar: (slideIdx: number, varIdx: number) => Promise<void>;
   getVarBlob: (slideIdx: number, varIdx: number) => Blob | null;
+  deleteHistory: (id: string) => Promise<void>;
+  loadHistory: (entry: HistoryEntry) => void;
+  saveFacePreset: (name: string) => void;
+  deleteFacePreset: (id: string) => void;
+  saveLayoutPreset: (name: string) => void;
+  deleteLayoutPreset: (id: string) => void;
+  applyFacePreset: (preset: FacePreset) => void;
+  applyLayoutPreset: (preset: LayoutPreset) => void;
 }
 
 const CarouselContext = createContext<(CarouselState & CarouselActions) | null>(null);
@@ -134,8 +171,8 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const [faceB64, setFaceB64State] = useState("");
   const [faceDataUrl, setFaceDataUrl] = useState("");
   const [faceName, setFaceName] = useState("");
-  const [layoutRefDataUrl, setLayoutRefDataUrl] = useState(""); // ← ADD
-  const [layoutRefName, setLayoutRefName] = useState(""); // ← ADD
+  const [layoutRefDataUrl, setLayoutRefDataUrl] = useState("");
+  const [layoutRefName, setLayoutRefName] = useState("");
   const [style, setStyle] = useState<StyleKey>("cinematic");
   const [light, setLight] = useState<LightKey>("dramatic");
   const [fmt, setFmt] = useState<FormatKey>("4:5");
@@ -147,11 +184,36 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const [varStatuses, setVarStatuses] = useState<Record<string, "idle" | "generating" | "done" | "error">>({});
   const [slideStatuses, setSlideStatuses] = useState<Record<number, "idle" | "processing" | "complete" | "error">>({});
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [generationComplete, setGenerationComplete] = useState(false);
   const [slideSteps, setSlideSteps] = useState<Record<number, string[]>>({});
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [facePresets, setFacePresets] = useState<FacePreset[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("facePresets") || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [layoutPresets, setLayoutPresets] = useState<LayoutPreset[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("layoutPresets") || "[]");
+    } catch {
+      return [];
+    }
+  });
 
   const faceB64Ref = useRef("");
+  const stopRef = useRef(false);
+
+  // ── Carrega histórico do Supabase ──────────────────────────
+  useEffect(() => {
+    fetch("/api/history")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setHistory(data))
+      .catch(() => {});
+  }, []);
 
   const setFace = useCallback((file: File) => {
     const r = new FileReader();
@@ -176,6 +238,96 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     r.readAsDataURL(file);
   }, []);
 
+  // ── Presets ────────────────────────────────────────────────
+  const saveFacePreset = useCallback(
+    (name: string) => {
+      if (!faceDataUrl || !faceB64Ref.current) return;
+      const preset: FacePreset = { id: Date.now().toString(), name, dataUrl: faceDataUrl, b64: faceB64Ref.current };
+      setFacePresets((prev) => {
+        const next = [...prev, preset];
+        localStorage.setItem("facePresets", JSON.stringify(next));
+        return next;
+      });
+    },
+    [faceDataUrl],
+  );
+
+  const deleteFacePreset = useCallback((id: string) => {
+    setFacePresets((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      localStorage.setItem("facePresets", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const applyFacePreset = useCallback((preset: FacePreset) => {
+    setFaceB64State(preset.b64);
+    faceB64Ref.current = preset.b64;
+    setFaceDataUrl(preset.dataUrl);
+    setFaceName(preset.name);
+  }, []);
+
+  const saveLayoutPreset = useCallback(
+    (name: string) => {
+      if (!layoutRefDataUrl) return;
+      const preset: LayoutPreset = { id: Date.now().toString(), name, dataUrl: layoutRefDataUrl };
+      setLayoutPresets((prev) => {
+        const next = [...prev, preset];
+        localStorage.setItem("layoutPresets", JSON.stringify(next));
+        return next;
+      });
+    },
+    [layoutRefDataUrl],
+  );
+
+  const deleteLayoutPreset = useCallback((id: string) => {
+    setLayoutPresets((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      localStorage.setItem("layoutPresets", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const applyLayoutPreset = useCallback((preset: LayoutPreset) => {
+    setLayoutRefDataUrl(preset.dataUrl);
+    setLayoutRefName(preset.name);
+  }, []);
+
+  // ── Histórico ──────────────────────────────────────────────
+  const saveToHistory = useCallback(async (entry: Omit<HistoryEntry, "id" | "createdAt">) => {
+    try {
+      const res = await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entry),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setHistory((prev) => [saved, ...prev]);
+      }
+    } catch {}
+  }, []);
+
+  const deleteHistory = useCallback(async (id: string) => {
+    try {
+      await fetch(`/api/history/${id}`, { method: "DELETE" });
+      setHistory((prev) => prev.filter((h) => h.id !== id));
+    } catch {}
+  }, []);
+
+  const loadHistory = useCallback((entry: HistoryEntry) => {
+    setRawText(entry.rawText);
+    setStyle(entry.style);
+    setLight(entry.light);
+    setFmt(entry.fmt);
+  }, []);
+
+  // ── STOP ───────────────────────────────────────────────────
+  const stopGeneration = useCallback(() => {
+    stopRef.current = true;
+    setIsStopping(true);
+  }, []);
+
   const setVarUrl = (si: number, vi: number, url: string) => setVarUrls((p) => ({ ...p, [`${si}_${vi}`]: url }));
   const setVarStatus = (si: number, vi: number, s: "idle" | "generating" | "done" | "error") =>
     setVarStatuses((p) => ({ ...p, [`${si}_${vi}`]: s }));
@@ -187,6 +339,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     const parsed = parseSlides(rawText);
     if (!parsed.length) return;
 
+    stopRef.current = false;
     const hasFaceRef = !!faceB64Ref.current;
     const totalSlides = parsed.length;
 
@@ -221,14 +374,22 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     setVarUrls({});
     setVarStatuses({});
     setSlideStatuses({});
-    setSlideSteps({}); // ← ADD
+    setSlideSteps({});
     setIsGenerating(true);
+    setIsStopping(false);
     setGenerationComplete(false);
     setProgress({ done: 0, total: totalSlides });
 
     const newBlobs: Record<number, (Blob | null)[]> = {};
+    let firstThumbUrl: string | undefined;
 
     for (let i = 0; i < processedSlides.length; i++) {
+      // ── STOP check ──
+      if (stopRef.current) {
+        setSlideStatus(i, "idle");
+        break;
+      }
+
       setProgress({ done: i, total: totalSlides });
       setSlideStatus(i, "processing");
       newBlobs[i] = new Array(4).fill(null);
@@ -241,15 +402,17 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
         const varJobs = [0, 1, 2, 3].map((v) =>
           generateAndCompose(processedSlides[i], v, faceB64Ref.current, isFirstOrLast, titleStyle)
             .then(({ blob, url }) => {
+              if (stopRef.current) return;
               newBlobs[i][v] = blob;
               setVarUrl(i, v, url);
               setVarStatus(i, v, "done");
+              if (!firstThumbUrl && i === 0 && v === 0) firstThumbUrl = url;
               setComposedBlobs((prev) => ({ ...prev, [i]: [...newBlobs[i]] }));
             })
             .catch(() => setVarStatus(i, v, "error")),
         );
         await Promise.all(varJobs);
-        setSlideStatus(i, "complete");
+        if (!stopRef.current) setSlideStatus(i, "complete");
       } catch {
         setSlideStatus(i, "error");
         [0, 1, 2, 3].forEach((v) => setVarStatus(i, v, "error"));
@@ -258,8 +421,20 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
 
     setProgress({ done: totalSlides, total: totalSlides });
     setIsGenerating(false);
-    setGenerationComplete(true);
-  }, [rawText, style, light, fmt, res]);
+    setIsStopping(false);
+
+    if (!stopRef.current) {
+      setGenerationComplete(true);
+      await saveToHistory({
+        rawText,
+        style,
+        light,
+        fmt,
+        slideCount: totalSlides,
+        thumbUrl: firstThumbUrl,
+      });
+    }
+  }, [rawText, style, light, fmt, res, saveToHistory]);
 
   const regenVar = useCallback(
     async (slideIdx: number, varIdx: number) => {
@@ -291,8 +466,8 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     faceDataUrl,
     faceName,
     layoutRefDataUrl,
-    layoutRefName, // ← ADD
-    slideSteps, // ← ADD
+    layoutRefName,
+    slideSteps,
     style,
     light,
     fmt,
@@ -304,18 +479,31 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     varStatuses,
     slideStatuses,
     isGenerating,
+    isStopping,
     progress,
     generationComplete,
+    history,
+    facePresets,
+    layoutPresets,
     setFace,
-    setLayoutRef, // ← ADD setLayoutRef
+    setLayoutRef,
     setStyle,
     setLight,
     setFmt,
     setRes,
     setRawText,
     startGeneration,
+    stopGeneration,
     regenVar,
     getVarBlob,
+    deleteHistory,
+    loadHistory,
+    saveFacePreset,
+    deleteFacePreset,
+    applyFacePreset,
+    saveLayoutPreset,
+    deleteLayoutPreset,
+    applyLayoutPreset,
   };
 
   return <CarouselContext.Provider value={value}>{children}</CarouselContext.Provider>;
