@@ -1,96 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 0 0% 0%;
+    --bg2: 210 100% 2%;
+    --foreground: 146 100% 86%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 170 100% 3%;
+    --card-foreground: 146 100% 86%;
+    --card2: 170 67% 5%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 170 100% 3%;
+    --popover-foreground: 146 100% 86%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 152 100% 50%;
+    --primary-foreground: 0 0% 0%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 152 100% 7%;
+    --secondary-foreground: 152 100% 62%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 150 45% 20%;
+    --muted-foreground: 150 35% 32%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 187 100% 50%;
+    --accent-foreground: 0 0% 0%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 345 100% 63%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --warning: 40 100% 50%;
 
-    --radius: 0.5rem;
+    --border: 152 50% 10%;
+    --border2: 152 60% 15%;
+    --input: 152 60% 15%;
+    --ring: 152 100% 50%;
 
-    --sidebar-background: 0 0% 98%;
+    --radius: 2px;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --neon: 152 100% 50%;
+    --neon2: 155 100% 55%;
+    --neon-dim: 152 100% 50%;
+    --neon-glow: 152 100% 50%;
+    --cyan: 187 100% 50%;
+    --red: 345 100% 63%;
+    --warn: 40 100% 50%;
 
-    --sidebar-primary: 240 5.9% 10%;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-ui: 'Rajdhani', sans-serif;
+    --font-logo: 'Orbitron', monospace;
 
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 0 0% 1%;
+    --sidebar-foreground: 146 100% 86%;
+    --sidebar-primary: 152 100% 50%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 150 45% 20%;
+    --sidebar-accent-foreground: 152 100% 62%;
+    --sidebar-border: 152 60% 15%;
+    --sidebar-ring: 152 100% 50%;
   }
 }
 
@@ -98,8 +68,57 @@ All colors MUST be HSL.
   * {
     @apply border-border;
   }
-
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-ui);
+    font-weight: 400;
+    cursor: crosshair;
+    overflow-x: hidden;
   }
 }
+
+/* CRT scan-line overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 2px, hsla(152,100%,50%,0.012) 2px, hsla(152,100%,50%,0.012) 4px),
+    repeating-linear-gradient(90deg, transparent, transparent 2px, hsla(152,100%,50%,0.008) 2px, hsla(152,100%,50%,0.008) 4px);
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* CRT scanline sweep */
+body::after {
+  content: '';
+  position: fixed;
+  top: -100%;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(to bottom, transparent, hsla(152,100%,50%,0.04), transparent);
+  animation: scan 8s linear infinite;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+@keyframes scan { to { top: 110% } }
+@keyframes spin { to { transform: rotate(360deg) } }
+@keyframes blink { 0%,100% { opacity: 1 } 50% { opacity: 0.2 } }
+@keyframes shimmer { 0% { transform: translateX(-100%) } 100% { transform: translateX(100%) } }
+@keyframes logoPulse {
+  0%,100% { text-shadow: 0 0 10px hsla(152,100%,50%,0.5), 0 0 25px hsla(152,100%,50%,0.25) }
+  50% { text-shadow: 0 0 18px hsla(152,100%,50%,0.5), 0 0 45px hsla(152,100%,50%,0.25), 0 0 70px hsla(152,100%,50%,0.15) }
+}
+@keyframes lineGlow { 0%,100% { opacity: 0.5 } 50% { opacity: 1 } }
+@keyframes emFloat { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-8px) } }
+@keyframes hexPulse { 0%,100% { opacity: 0.3 } 50% { opacity: 0.7 } }
+@keyframes stepGlow { 0%,100% { box-shadow: none } 50% { box-shadow: 0 0 10px hsla(40,100%,50%,0.15) } }
+@keyframes faceRingSpin { to { transform: rotate(360deg) } }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 3px; height: 3px }
+::-webkit-scrollbar-track { background: hsl(var(--background)) }
+::-webkit-scrollbar-thumb { background: hsl(var(--border2)); border-radius: 2px }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary)) }
