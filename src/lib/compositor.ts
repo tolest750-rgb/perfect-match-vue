@@ -39,6 +39,17 @@ function hexToRgb(hex: string): string | null {
   return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : null;
 }
 
+function upscale2x(src: HTMLCanvasElement): HTMLCanvasElement {
+  const up = document.createElement("canvas");
+  up.width = src.width * 2;
+  up.height = src.height * 2;
+  const uc = up.getContext("2d")!;
+  uc.imageSmoothingEnabled = true;
+  uc.imageSmoothingQuality = "high";
+  uc.drawImage(src, 0, 0, up.width, up.height);
+  return up;
+}
+
 const DIM: Record<string, [number, number]> = {
   "4:5": [1080, 1350],
   "9:16": [1080, 1920],
@@ -93,26 +104,25 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
   const layoutPos: LayoutPosition = layoutObj?.layoutPos ?? "bottom-left";
   const accentRgb = hexToRgb(accent) ?? "200,255,0";
 
-  // ── Tipografia — tamanhos maiores e proporcionais ──────────────
+  // ── Tipografia ────────────────────────────────────────────────
   const NUM_SIZE = Math.round(14 * F);
   const TTL_SIZE = Math.round(96 * F);
-  const SUB_SIZE = Math.round(34 * F); // +30% — legível a distância
+  const SUB_SIZE = Math.round(34 * F); // legível a distância
   const CTA_SIZE = Math.round(20 * F);
 
   const numFont = `700 ${NUM_SIZE}px 'Bricolage Grotesque', sans-serif`;
-  const tFont = `800 ${TTL_SIZE}px 'Bricolage Grotesque', sans-serif`; // bold sem ser ultra-pesado
+  const tFont = `800 ${TTL_SIZE}px 'Bricolage Grotesque', sans-serif`; // bold
   const sFont = `400 ${SUB_SIZE}px 'Bricolage Grotesque', sans-serif`; // regular
   const ctaFont = `700 ${CTA_SIZE}px 'Bricolage Grotesque', sans-serif`;
 
-  const numFont = `700 ${NUM_SIZE}px 'Bricolage Grotesque', sans-serif`;
-  const tFont = `900 ${TTL_SIZE}px 'Bricolage Grotesque', sans-serif`;
-  const sFont = `500 ${SUB_SIZE}px 'Bricolage Grotesque', sans-serif`;
-  const ctaFont = `800 ${CTA_SIZE}px 'Bricolage Grotesque', sans-serif`;
-
   return new Promise<Blob>((resolve) => {
+    const exportBlob = () => {
+      const out = upscale2x(canvas);
+      out.toBlob((b) => resolve(b!), "image/png", 1.0);
+    };
+
     const doText = () => {
-      // ── 1. GRADIENTE DE LEGIBILIDADE — suave, não opaco ─────────
-      // Começa mais tarde e não chega a preto puro — mantém a foto viva
+      // ── 1. GRADIENTE DE LEGIBILIDADE — suave, foto respira ──────
       let ov: CanvasGradient;
       if (layoutPos === "right") {
         ov = ctx.createLinearGradient(CW * 0.38, 0, CW, 0);
@@ -132,8 +142,6 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
         ov.addColorStop(0.4, "rgba(0,0,0,0.50)");
         ov.addColorStop(1, "rgba(0,0,0,0)");
       } else {
-        // bottom-left / bottom-center / split-bottom / center
-        // Gradiente começa na metade — foto respira até lá
         ov = ctx.createLinearGradient(0, CH * 0.38, 0, CH);
         ov.addColorStop(0, "rgba(0,0,0,0)");
         ov.addColorStop(0.28, "rgba(0,0,0,0.32)");
@@ -143,8 +151,7 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
       ctx.fillStyle = ov;
       ctx.fillRect(0, 0, CW, CH);
 
-      // ── 2. CAMADA DE COR AMBIENTE — accent contamina as sombras ─
-      // Simula o efeito de luz colorida da cena tocando a zona escura
+      // ── 2. COR AMBIENTE — accent contamina as sombras ────────────
       let accentOv: CanvasGradient;
       if (layoutPos === "right") {
         accentOv = ctx.createLinearGradient(CW * 0.55, 0, CW, 0);
@@ -161,7 +168,7 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
       ctx.fillStyle = accentOv;
       ctx.fillRect(0, 0, CW, CH);
 
-      // ── 3. ZONA E LARGURA DO BLOCO DE TEXTO ─────────────────────
+      // ── 3. ZONA DE TEXTO ─────────────────────────────────────────
       const isHorizontal = layoutPos === "right" || layoutPos === "left";
       const textW = isHorizontal ? CW * 0.46 - PAD_X : CW - PAD_X * 2;
       const textX = layoutPos === "right" ? CW * 0.54 : PAD_X;
@@ -172,15 +179,15 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
 
       const tLH = TTL_SIZE * F * 0.96;
       const sLH = SUB_SIZE * F * 1.5;
-      const GAP_TS = 32 * F; // mais respiro entre título e subtítulo
+      const GAP_TS = 32 * F;
       const GAP_SC = 28 * F;
-      const CTA_H = sl.cta ? 56 * F : 0; // pílula maior
+      const CTA_H = sl.cta ? 58 * F : 0;
       const CTA_GAP = sl.cta ? GAP_SC : 0;
 
       const BLOCK_H =
         tLines.length * tLH + (sLines.length ? GAP_TS + sLines.length * sLH : 0) + (sl.cta ? CTA_GAP + CTA_H : 0);
 
-      // ── 5. Y INICIAL POR LAYOUTPOS ───────────────────────────────
+      // ── 5. Y INICIAL ─────────────────────────────────────────────
       let ty: number;
       if (layoutPos === "top-center") {
         ty = PAD_Y * 2;
@@ -201,13 +208,12 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
       ctx.textBaseline = "alphabetic";
       ctx.restore();
 
-      // ── 7. TÍTULO — shadow direcional + glow na linha accent ─────
+      // ── 7. TÍTULO ────────────────────────────────────────────────
       ctx.font = tFont;
       tLines.forEach((ln, idx) => {
         const isAccentLine = idx === tLines.length - 1;
-
         if (isAccentLine) {
-          // Passada 1: glow difuso — cria o halo da luz da cena
+          // Passada 1: glow difuso
           ctx.save();
           ctx.shadowColor = accent;
           ctx.shadowBlur = 55 * F;
@@ -217,8 +223,7 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
           ctx.fillStyle = accent;
           ctx.fillText(ln, textX, ty);
           ctx.restore();
-
-          // Passada 2: texto nítido por cima
+          // Passada 2: texto nítido
           ctx.save();
           ctx.shadowColor = `rgba(${accentRgb},0.4)`;
           ctx.shadowBlur = 20 * F;
@@ -228,7 +233,6 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
           ctx.fillText(ln, textX, ty);
           ctx.restore();
         } else {
-          // Linhas brancas: drop shadow direcional sutil
           ctx.save();
           ctx.shadowColor = "rgba(0,0,0,0.80)";
           ctx.shadowBlur = 22 * F;
@@ -238,11 +242,10 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
           ctx.fillText(ln, textX, ty);
           ctx.restore();
         }
-
         ty += tLH;
       });
 
-      // ── 8. SUBTÍTULO — maior, shadow suave, tint de cena ────────
+      // ── 8. SUBTÍTULO ─────────────────────────────────────────────
       if (sLines.length) {
         ty += GAP_TS;
         ctx.font = sFont;
@@ -259,97 +262,96 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
         });
       }
 
-      // ── 9. CTA — pílula premium com glow, highlight e sombra ────
+      // ── 9. CTA — pílula premium texto + ícone seta ───────────────
       if (sl.cta) {
-  ty += CTA_GAP;
-  ctx.font = ctaFont;
+        ty += CTA_GAP;
+        ctx.font = ctaFont;
 
-  const ICON_W   = 32 * F;   // largura reservada para o ícone
-  const ICON_GAP = 12 * F;
-  const PAD_L    = 28 * F;
-  const PAD_R    = 20 * F;
+        const ICON_W = 32 * F;
+        const ICON_GAP = 12 * F;
+        const PAD_L = 28 * F;
+        const PAD_R = 20 * F;
 
-  const textMetrics = ctx.measureText(sl.cta);
-  const ctaW = PAD_L + textMetrics.width + ICON_GAP + ICON_W + PAD_R;
-  const ctaH = 58 * F;
-  const cx   = textX;
-  const cy   = ty;
+        const textMetrics = ctx.measureText(sl.cta);
+        const ctaW = PAD_L + textMetrics.width + ICON_GAP + ICON_W + PAD_R;
+        const ctaH = 58 * F;
+        const cx = textX;
+        const cy = ty;
 
-  // Sombra projetada colorida
-  ctx.save();
-  ctx.shadowColor   = `rgba(${accentRgb},0.55)`;
-  ctx.shadowBlur    = 36 * F;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 8 * F;
-  ctx.fillStyle = accent;
-  rrect(ctx, cx, cy, ctaW, ctaH, 30 * F);
-  ctx.fill();
-  ctx.restore();
+        // Sombra projetada colorida
+        ctx.save();
+        ctx.shadowColor = `rgba(${accentRgb},0.55)`;
+        ctx.shadowBlur = 36 * F;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 8 * F;
+        ctx.fillStyle = accent;
+        rrect(ctx, cx, cy, ctaW, ctaH, 30 * F);
+        ctx.fill();
+        ctx.restore();
 
-  // Fill limpo
-  ctx.fillStyle = accent;
-  rrect(ctx, cx, cy, ctaW, ctaH, 30 * F);
-  ctx.fill();
+        // Fill limpo
+        ctx.fillStyle = accent;
+        rrect(ctx, cx, cy, ctaW, ctaH, 30 * F);
+        ctx.fill();
 
-  // Highlight chanfro
-  const hl = ctx.createLinearGradient(cx, cy, cx, cy + ctaH * 0.55);
-  hl.addColorStop(0,   "rgba(255,255,255,0.28)");
-  hl.addColorStop(0.5, "rgba(255,255,255,0.06)");
-  hl.addColorStop(1,   "rgba(255,255,255,0)");
-  ctx.fillStyle = hl;
-  rrect(ctx, cx, cy, ctaW, ctaH * 0.55, 30 * F);
-  ctx.fill();
+        // Highlight chanfro
+        const hl = ctx.createLinearGradient(cx, cy, cx, cy + ctaH * 0.55);
+        hl.addColorStop(0, "rgba(255,255,255,0.28)");
+        hl.addColorStop(0.5, "rgba(255,255,255,0.06)");
+        hl.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = hl;
+        rrect(ctx, cx, cy, ctaW, ctaH * 0.55, 30 * F);
+        ctx.fill();
 
-  // Borda sutil
-  ctx.save();
-  ctx.strokeStyle = "rgba(255,255,255,0.18)";
-  ctx.lineWidth   = 1.5 * F;
-  rrect(ctx, cx, cy, ctaW, ctaH, 30 * F);
-  ctx.stroke();
-  ctx.restore();
+        // Borda sutil
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
+        ctx.lineWidth = 1.5 * F;
+        rrect(ctx, cx, cy, ctaW, ctaH, 30 * F);
+        ctx.stroke();
+        ctx.restore();
 
-  // Texto do CTA
-  ctx.save();
-  ctx.font          = ctaFont;
-  ctx.shadowColor   = "rgba(0,0,0,0.30)";
-  ctx.shadowBlur    = 5 * F;
-  ctx.shadowOffsetY = 1 * F;
-  ctx.fillStyle     = "#000000";
-  ctx.textBaseline  = "middle";
-  ctx.fillText(sl.cta, cx + PAD_L, cy + ctaH * 0.5);
-  ctx.textBaseline  = "alphabetic";
-  ctx.restore();
+        // Texto
+        ctx.save();
+        ctx.font = ctaFont;
+        ctx.shadowColor = "rgba(0,0,0,0.30)";
+        ctx.shadowBlur = 5 * F;
+        ctx.shadowOffsetY = 1 * F;
+        ctx.fillStyle = "#000000";
+        ctx.textBaseline = "middle";
+        ctx.fillText(sl.cta, cx + PAD_L, cy + ctaH * 0.5);
+        ctx.textBaseline = "alphabetic";
+        ctx.restore();
 
-  // Ícone — círculo escuro semitransparente + seta →
-  const iconCX = cx + PAD_L + textMetrics.width + ICON_GAP + ICON_W * 0.5;
-  const iconCY = cy + ctaH * 0.5;
-  const iconR  = ICON_W * 0.42;
+        // Ícone — círculo + seta →
+        const iconCX = cx + PAD_L + textMetrics.width + ICON_GAP + ICON_W * 0.5;
+        const iconCY = cy + ctaH * 0.5;
+        const iconR = ICON_W * 0.42;
 
-  // Fundo do ícone
-  ctx.save();
-  ctx.fillStyle = "rgba(0,0,0,0.22)";
-  ctx.beginPath();
-  ctx.arc(iconCX, iconCY, iconR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+        ctx.save();
+        ctx.fillStyle = "rgba(0,0,0,0.22)";
+        ctx.beginPath();
+        ctx.arc(iconCX, iconCY, iconR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
 
-  // Seta →  desenhada com linhas
-  ctx.save();
-  ctx.strokeStyle = "#000000";
-  ctx.lineWidth   = 2.2 * F;
-  ctx.lineCap     = "round";
-  ctx.lineJoin    = "round";
-  const aW = iconR * 0.55;  // metade do comprimento da seta
-  const aH = iconR * 0.45;  // altura das pontas
-  ctx.beginPath();
-  ctx.moveTo(iconCX - aW, iconCY);
-  ctx.lineTo(iconCX + aW, iconCY);
-  ctx.moveTo(iconCX + aW - aH * 0.8, iconCY - aH);
-  ctx.lineTo(iconCX + aW, iconCY);
-  ctx.lineTo(iconCX + aW - aH * 0.8, iconCY + aH);
-  ctx.stroke();
-  ctx.restore();
-}
+        ctx.save();
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = 2.2 * F;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        const aW = iconR * 0.55;
+        const aH = iconR * 0.45;
+        ctx.beginPath();
+        ctx.moveTo(iconCX - aW, iconCY);
+        ctx.lineTo(iconCX + aW, iconCY);
+        ctx.moveTo(iconCX + aW - aH * 0.8, iconCY - aH);
+        ctx.lineTo(iconCX + aW, iconCY);
+        ctx.lineTo(iconCX + aW - aH * 0.8, iconCY + aH);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }; // fim doText
 
     // ── Fallback: sem imagem da IA ─────────────────────────────────
     const drawFallback = () => {
@@ -377,25 +379,18 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
           ctx.drawImage(fi, fx, CH * 0.05, fw, fh);
           ctx.restore();
           doText();
-          const up = document.createElement("canvas");
-        up.width  = CW * 2;
-        up.height = CH * 2;
-        const uc = up.getContext("2d")!;
-        uc.imageSmoothingEnabled = true;
-        uc.imageSmoothingQuality = "high";
-        uc.drawImage(canvas, 0, 0, up.width, up.height);
-        up.toBlob((b) => resolve(b!), "image/png", 1.0);
-                };
-                fi.onerror = () => {
-                  doText();
-                  canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
-                };
-                fi.src = "data:image/jpeg;base64," + faceB64;
-              } else {
-                doText();
-                canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
-              }
-            };
+          exportBlob();
+        };
+        fi.onerror = () => {
+          doText();
+          exportBlob();
+        };
+        fi.src = "data:image/jpeg;base64," + faceB64;
+      } else {
+        doText();
+        exportBlob();
+      }
+    };
 
     // ── Fluxo principal ────────────────────────────────────────────
     if (imgSrc) {
@@ -404,26 +399,7 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
       img.onload = () => {
         ctx.drawImage(img, 0, 0, CW, CH);
         doText();
-      
-        // Upscale 4K: renderiza num canvas 2x maior com ImageBitmap de alta qualidade
-        createImageBitmap(canvas, {
-          resizeWidth:   CW * 2,
-          resizeHeight:  CH * 2,
-          resizeQuality: "high",
-        }).then((bmp) => {
-          const up = document.createElement("canvas");
-          up.width  = CW * 2;
-          up.height = CH * 2;
-          const uc = up.getContext("2d")!;
-          uc.imageSmoothingEnabled  = true;
-          uc.imageSmoothingQuality  = "high";
-          uc.drawImage(bmp, 0, 0);
-          bmp.close();
-          up.toBlob((b) => resolve(b!), "image/png", 1.0);
-        }).catch(() => {
-          // fallback sem upscale se o browser não suportar
-          canvas.toBlob((b) => resolve(b!), "image/png", 1.0);
-        });
+        exportBlob();
       };
       img.onerror = () => drawFallback();
       img.src = imgSrc;
