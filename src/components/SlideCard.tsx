@@ -152,7 +152,7 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
             {/* Negative */}
             <PromptBlock label="NEGATIVE_PROMPT" tag="EXCLUSÃO" tagClass="bg-destructive/[0.07] text-destructive border-destructive/20" text={slide.prompt.neg} textClass="text-[#7a3a3a]" />
             {/* Layout */}
-            <PromptBlock label="LAYOUT_TIPOGRÁFICO" tag="CANVAS" tagClass="bg-accent/[0.07] text-accent border-accent/20" text={slide.layout} />
+            <PromptBlock label="LAYOUT_DATA" tag="CANVAS" tagClass="bg-accent/[0.07] text-accent border-accent/20" text={JSON.stringify(slide.layout, null, 2)} />
           </div>
         </div>
       )}
