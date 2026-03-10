@@ -129,7 +129,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
 
   const startGeneration = useCallback(async () => {
     if (!rawText.trim()) return;
-    if (!apiKey && !demo) return;
 
     const parsed = parseSlides(rawText);
     if (!parsed.length) return;
