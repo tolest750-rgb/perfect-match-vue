@@ -17,10 +17,23 @@ export async function callGemini(
   const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
   const parts: any[] = [];
+
+  // Face reference goes AFTER the text instruction so the model treats it as supplementary
+  const promptText = [
+    sl.prompt.pos + VAR_HINTS[varIdx],
+    '',
+    'NEGATIVE — Strictly avoid the following in the generated image:',
+    sl.prompt.neg,
+  ].join('\n');
+
+  // Text instruction FIRST so the model prioritizes it
+  parts.push({ text: promptText });
+
+  // Face image AFTER text — labeled clearly as reference-only
   if (faceB64) {
+    parts.push({ text: '[FACE REFERENCE IMAGE BELOW — use ONLY for facial identity extraction, NOT for scene composition]' });
     parts.push({ inline_data: { mime_type: 'image/jpeg', data: faceB64 } });
   }
-  parts.push({ text: sl.prompt.pos + VAR_HINTS[varIdx] + (sl.prompt.neg ? `\n\nAvoid: ${sl.prompt.neg}` : '') });
 
   const payload = {
     contents: [{ parts }],
