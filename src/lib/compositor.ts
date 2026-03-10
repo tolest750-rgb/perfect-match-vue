@@ -34,6 +34,11 @@ function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h
   ctx.closePath();
 }
 
+function hexToRgb(hex: string): string | null {
+  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : null;
+}
+
 const DIM: Record<string, [number, number]> = {
   "4:5": [1080, 1350],
   "9:16": [1080, 1920],
@@ -47,7 +52,6 @@ const ACC: Record<LightKey, string> = {
   moody: "#e0e0ff",
 };
 
-// Carrega Bricolage Grotesque uma única vez
 let fontLoaded = false;
 async function ensureFont() {
   if (fontLoaded) return;
@@ -61,13 +65,8 @@ async function ensureFont() {
     document.fonts.add(loaded);
     fontLoaded = true;
   } catch {
-    // fallback silencioso — usa sans-serif
+    // fallback silencioso
   }
-}
-
-function hexToRgb(hex: string): string | null {
-  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return r ? `${parseInt(r[1],16)},${parseInt(r[2],16)},${parseInt(r[3],16)}` : null;
 }
 
 export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, faceB64: string): Promise<Blob> {
@@ -86,205 +85,233 @@ export async function composeSlide(imgSrc: string | null, sl: ProcessedSlide, fa
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
 
-  // Margens: 7% horizontal, 6% vertical
   const PAD_X = Math.round(CW * 0.07);
-  const PAD_Y = Math.round(CH * 0.06);
+  const PAD_Y = Math.round(CH * 0.055);
 
   const layoutObj = sl.layout as any;
   const accent: string = layoutObj?.accent ?? ACC[sl.light as LightKey] ?? "#c8ff00";
   const layoutPos: LayoutPosition = layoutObj?.layoutPos ?? "bottom-left";
+  const accentRgb = hexToRgb(accent) ?? "200,255,0";
 
-  // ── Tipografia ──────────────────────────────────────────────
-  const NUM_SIZE = Math.round(13 * F);
-  const TTL_SIZE = Math.round(88 * F);
-  const SUB_SIZE = Math.round(18 * F);
-  const CTA_SIZE = Math.round(12 * F);
+  // ── Tipografia — tamanhos maiores e proporcionais ──────────────
+  const NUM_SIZE = Math.round(14 * F);
+  const TTL_SIZE = Math.round(96 * F); // +9% vs original
+  const SUB_SIZE = Math.round(26 * F); // +44% vs original — subtítulo legível
+  const CTA_SIZE = Math.round(18 * F); // +50% vs original
 
   const numFont = `700 ${NUM_SIZE}px 'Bricolage Grotesque', sans-serif`;
   const tFont = `900 ${TTL_SIZE}px 'Bricolage Grotesque', sans-serif`;
-  const sFont = `400 ${SUB_SIZE}px 'Bricolage Grotesque', sans-serif`;
-  const ctaFont = `700 ${CTA_SIZE}px 'Bricolage Grotesque', sans-serif`;
+  const sFont = `500 ${SUB_SIZE}px 'Bricolage Grotesque', sans-serif`;
+  const ctaFont = `800 ${CTA_SIZE}px 'Bricolage Grotesque', sans-serif`;
 
   return new Promise<Blob>((resolve) => {
     const doText = () => {
-      // ── Gradiente de legibilidade adaptado ao layoutPos ──────
+      // ── 1. GRADIENTE DE LEGIBILIDADE — suave, não opaco ─────────
+      // Começa mais tarde e não chega a preto puro — mantém a foto viva
       let ov: CanvasGradient;
       if (layoutPos === "right") {
-        ov = ctx.createLinearGradient(CW * 0.42, 0, CW, 0);
+        ov = ctx.createLinearGradient(CW * 0.38, 0, CW, 0);
         ov.addColorStop(0, "rgba(0,0,0,0)");
-        ov.addColorStop(0.25, "rgba(0,0,0,0.45)");
-        ov.addColorStop(0.65, "rgba(0,0,0,0.82)");
-        ov.addColorStop(1, "rgba(0,0,0,0.93)");
+        ov.addColorStop(0.18, "rgba(0,0,0,0.30)");
+        ov.addColorStop(0.55, "rgba(0,0,0,0.72)");
+        ov.addColorStop(1, "rgba(0,0,0,0.88)");
       } else if (layoutPos === "left") {
-        ov = ctx.createLinearGradient(CW * 0.58, 0, 0, 0);
+        ov = ctx.createLinearGradient(CW * 0.62, 0, 0, 0);
         ov.addColorStop(0, "rgba(0,0,0,0)");
-        ov.addColorStop(0.25, "rgba(0,0,0,0.45)");
-        ov.addColorStop(0.65, "rgba(0,0,0,0.82)");
-        ov.addColorStop(1, "rgba(0,0,0,0.93)");
+        ov.addColorStop(0.18, "rgba(0,0,0,0.30)");
+        ov.addColorStop(0.55, "rgba(0,0,0,0.72)");
+        ov.addColorStop(1, "rgba(0,0,0,0.88)");
       } else if (layoutPos === "top-center") {
-        ov = ctx.createLinearGradient(0, 0, 0, CH * 0.52);
-        ov.addColorStop(0, "rgba(0,0,0,0.97)");
-        ov.addColorStop(0.45, "rgba(0,0,0,0.60)");
+        ov = ctx.createLinearGradient(0, 0, 0, CH * 0.5);
+        ov.addColorStop(0, "rgba(0,0,0,0.90)");
+        ov.addColorStop(0.4, "rgba(0,0,0,0.50)");
         ov.addColorStop(1, "rgba(0,0,0,0)");
       } else {
-        ov = ctx.createLinearGradient(0, CH * 0.25, 0, CH);
+        // bottom-left / bottom-center / split-bottom / center
+        // Gradiente começa na metade — foto respira até lá
+        ov = ctx.createLinearGradient(0, CH * 0.38, 0, CH);
         ov.addColorStop(0, "rgba(0,0,0,0)");
-        ov.addColorStop(0.3, "rgba(0,0,0,0.38)");
-        ov.addColorStop(0.65, "rgba(0,0,0,0.78)");
-        ov.addColorStop(1, "rgba(0,0,0,0.93)");
+        ov.addColorStop(0.28, "rgba(0,0,0,0.32)");
+        ov.addColorStop(0.58, "rgba(0,0,0,0.68)");
+        ov.addColorStop(1, "rgba(0,0,0,0.88)");
       }
-
-    ctx.fillStyle = ov;
-    ctx.fillRect(0, 0, CW, CH);
-
-// Camada de cor ambiente — accent contamina o gradiente escuro
-const accentRgb = hexToRgb(accent);
-if (accentRgb) {
-  let accentOv: CanvasGradient;
-  if (layoutPos === "right") {
-    accentOv = ctx.createLinearGradient(CW * 0.54, 0, CW, 0);
-  } else if (layoutPos === "left") {
-    accentOv = ctx.createLinearGradient(CW * 0.46, 0, 0, 0);
-  } else if (layoutPos === "top-center") {
-    accentOv = ctx.createLinearGradient(0, 0, 0, CH * 0.45);
-  } else {
-    accentOv = ctx.createLinearGradient(0, CH * 0.45, 0, CH);
-  }
-  accentOv.addColorStop(0, `rgba(${accentRgb},0)`);
-  accentOv.addColorStop(0.6, `rgba(${accentRgb},0.06)`);
-  accentOv.addColorStop(1, `rgba(${accentRgb},0.13)`);
-  ctx.fillStyle = accentOv;
-  ctx.fillRect(0, 0, CW, CH);
-}
       ctx.fillStyle = ov;
       ctx.fillRect(0, 0, CW, CH);
 
-      // ── Zona e largura do bloco de texto ────────────────────
+      // ── 2. CAMADA DE COR AMBIENTE — accent contamina as sombras ─
+      // Simula o efeito de luz colorida da cena tocando a zona escura
+      let accentOv: CanvasGradient;
+      if (layoutPos === "right") {
+        accentOv = ctx.createLinearGradient(CW * 0.55, 0, CW, 0);
+      } else if (layoutPos === "left") {
+        accentOv = ctx.createLinearGradient(CW * 0.45, 0, 0, 0);
+      } else if (layoutPos === "top-center") {
+        accentOv = ctx.createLinearGradient(0, 0, 0, CH * 0.42);
+      } else {
+        accentOv = ctx.createLinearGradient(0, CH * 0.5, 0, CH);
+      }
+      accentOv.addColorStop(0, `rgba(${accentRgb},0)`);
+      accentOv.addColorStop(0.55, `rgba(${accentRgb},0.05)`);
+      accentOv.addColorStop(1, `rgba(${accentRgb},0.12)`);
+      ctx.fillStyle = accentOv;
+      ctx.fillRect(0, 0, CW, CH);
+
+      // ── 3. ZONA E LARGURA DO BLOCO DE TEXTO ─────────────────────
       const isHorizontal = layoutPos === "right" || layoutPos === "left";
       const textW = isHorizontal ? CW * 0.46 - PAD_X : CW - PAD_X * 2;
       const textX = layoutPos === "right" ? CW * 0.54 : PAD_X;
 
-      // ── Medir linhas ─────────────────────────────────────────
+      // ── 4. MEDIR LINHAS ──────────────────────────────────────────
       const tLines = wrapTxt(ctx, sl.titulo, tFont, textW, 3);
-      const sLines = sl.subtitulo ? wrapTxt(ctx, sl.subtitulo, sFont, textW, 4) : [];
+      const sLines = sl.subtitulo ? wrapTxt(ctx, sl.subtitulo, sFont, textW, 3) : [];
 
-      const tLH = TTL_SIZE * F * 0.98; // linhas coladas, igual à referência
-      const sLH = SUB_SIZE * F * 1.55;
-      const GAP_TS = 24 * F;
-      const GAP_SC = 20 * F;
-      const CTA_H = sl.cta ? 38 * F : 0;
+      const tLH = TTL_SIZE * F * 0.96;
+      const sLH = SUB_SIZE * F * 1.5;
+      const GAP_TS = 32 * F; // mais respiro entre título e subtítulo
+      const GAP_SC = 28 * F;
+      const CTA_H = sl.cta ? 56 * F : 0; // pílula maior
       const CTA_GAP = sl.cta ? GAP_SC : 0;
 
       const BLOCK_H =
         tLines.length * tLH + (sLines.length ? GAP_TS + sLines.length * sLH : 0) + (sl.cta ? CTA_GAP + CTA_H : 0);
 
-      // ── Y inicial por layoutPos ──────────────────────────────
+      // ── 5. Y INICIAL POR LAYOUTPOS ───────────────────────────────
       let ty: number;
       if (layoutPos === "top-center") {
         ty = PAD_Y * 2;
       } else if (isHorizontal) {
-        ty = CH * 0.32; // começa em 32% — igual à referência
+        ty = CH * 0.3;
       } else {
-        ty = CH - PAD_Y - BLOCK_H; // ancora no fundo
+        ty = CH - PAD_Y * 1.4 - BLOCK_H;
       }
 
-      // ── Número do slide — topo esquerdo ─────────────────────
+      // ── 6. NÚMERO DO SLIDE ───────────────────────────────────────
+      ctx.save();
+      ctx.font = numFont;
+      ctx.shadowColor = "rgba(0,0,0,0.6)";
+      ctx.shadowBlur = 8 * F;
+      ctx.fillStyle = "rgba(255,255,255,0.45)";
+      ctx.textBaseline = "top";
+      ctx.fillText(sl.num, PAD_X, PAD_Y);
+      ctx.textBaseline = "alphabetic";
+      ctx.restore();
+
+      // ── 7. TÍTULO — shadow direcional + glow na linha accent ─────
       ctx.font = tFont;
       tLines.forEach((ln, idx) => {
         const isAccentLine = idx === tLines.length - 1;
 
-      if (isAccentLine) {
-        // Glow difuso por baixo
-        ctx.save();
-        ctx.shadowColor = accent;
-        ctx.shadowBlur = 38 * F;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 4 * F;
-        ctx.fillStyle = accent;
-        ctx.fillText(ln, textX, ty);
-        ctx.restore();
-    
-        // Segunda passada sem shadow — garante nitidez
-        ctx.save();
-        ctx.fillStyle = accent;
-        ctx.fillText(ln, textX, ty);
-        ctx.restore();
-      } else {
-        // Linhas brancas: drop shadow sutil direcional
-        ctx.save();
-        ctx.shadowColor = "rgba(0,0,0,0.75)";
-        ctx.shadowBlur = 18 * F;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 3 * F;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(ln, textX, ty);
-        ctx.restore();
-      }
+        if (isAccentLine) {
+          // Passada 1: glow difuso — cria o halo da luz da cena
+          ctx.save();
+          ctx.shadowColor = accent;
+          ctx.shadowBlur = 55 * F;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 6 * F;
+          ctx.globalAlpha = 0.6;
+          ctx.fillStyle = accent;
+          ctx.fillText(ln, textX, ty);
+          ctx.restore();
 
-  ty += tLH;
-});
+          // Passada 2: texto nítido por cima
+          ctx.save();
+          ctx.shadowColor = `rgba(${accentRgb},0.4)`;
+          ctx.shadowBlur = 20 * F;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 3 * F;
+          ctx.fillStyle = accent;
+          ctx.fillText(ln, textX, ty);
+          ctx.restore();
+        } else {
+          // Linhas brancas: drop shadow direcional sutil
+          ctx.save();
+          ctx.shadowColor = "rgba(0,0,0,0.80)";
+          ctx.shadowBlur = 22 * F;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 4 * F;
+          ctx.fillStyle = "#ffffff";
+          ctx.fillText(ln, textX, ty);
+          ctx.restore();
+        }
 
-      // ── Subtítulo — branco suave ─────────────────────────────
+        ty += tLH;
+      });
+
+      // ── 8. SUBTÍTULO — maior, shadow suave, tint de cena ────────
       if (sLines.length) {
         ty += GAP_TS;
         ctx.font = sFont;
         sLines.forEach((ln) => {
           ctx.save();
-          ctx.shadowColor = "rgba(0,0,0,0.65)";
-          ctx.shadowBlur = 12 * F;
+          ctx.shadowColor = "rgba(0,0,0,0.70)";
+          ctx.shadowBlur = 16 * F;
           ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = 2 * F;
-          ctx.fillStyle = "rgba(255,255,255,0.82)";
+          ctx.shadowOffsetY = 3 * F;
+          ctx.fillStyle = "rgba(255,255,255,0.88)";
           ctx.fillText(ln, textX, ty);
           ctx.restore();
           ty += sLH;
         });
       }
 
-      // ── CTA — pílula sólida accent, texto preto ──────────────
-     if (sl.cta) {
-      ty += CTA_GAP;
-      ctx.font = ctaFont;
-      const ctaW = ctx.measureText(sl.cta).width + 40 * F;
-      const ctaH = 38 * F;
-      const cx = textX;
-      const cy = ty - ctaH * 0.82;
-    
-      // Sombra projetada do pill
-      ctx.save();
-      ctx.shadowColor = accent;
-      ctx.shadowBlur = 28 * F;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 6 * F;
-      ctx.fillStyle = accent;
-      rrect(ctx, cx, cy, ctaW, ctaH, 22 * F);
-      ctx.fill();
-      ctx.restore();
-    
-      // Fill limpo por cima (sem shadow — evita borrão no texto interno)
-      ctx.fillStyle = accent;
-      rrect(ctx, cx, cy, ctaW, ctaH, 22 * F);
-      ctx.fill();
-    
-      // Highlight de luz no topo do pill (reflexo)
-      const pillHL = ctx.createLinearGradient(cx, cy, cx, cy + ctaH * 0.5);
-      pillHL.addColorStop(0, "rgba(255,255,255,0.22)");
-      pillHL.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = pillHL;
-      rrect(ctx, cx, cy, ctaW, ctaH * 0.5, 22 * F);
-      ctx.fill();
-    
-      // Texto do CTA
-      ctx.save();
-      ctx.shadowColor = "rgba(0,0,0,0.4)";
-      ctx.shadowBlur = 4 * F;
-      ctx.shadowOffsetY = 1 * F;
-      ctx.fillStyle = "#000000";
-      ctx.fillText(sl.cta, cx + 20 * F, cy + ctaH * 0.65);
-      ctx.restore();
-    }
+      // ── 9. CTA — pílula premium com glow, highlight e sombra ────
+      if (sl.cta) {
+        ty += CTA_GAP;
+        ctx.font = ctaFont;
 
-    // ── Fallback: sem imagem da IA ───────────────────────────────
+        const ctaW = ctx.measureText(sl.cta).width + 60 * F;
+        const ctaH = 56 * F;
+        const cx = textX;
+        const cy = ty;
+
+        // Sombra projetada colorida — efeito de luz da cena
+        ctx.save();
+        ctx.shadowColor = `rgba(${accentRgb},0.55)`;
+        ctx.shadowBlur = 36 * F;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 8 * F;
+        ctx.fillStyle = accent;
+        rrect(ctx, cx, cy, ctaW, ctaH, 28 * F);
+        ctx.fill();
+        ctx.restore();
+
+        // Fill limpo — garante cor viva sem borrão
+        ctx.fillStyle = accent;
+        rrect(ctx, cx, cy, ctaW, ctaH, 28 * F);
+        ctx.fill();
+
+        // Highlight de luz no topo — chanfro/reflexo premium
+        const hl = ctx.createLinearGradient(cx, cy, cx, cy + ctaH * 0.55);
+        hl.addColorStop(0, "rgba(255,255,255,0.30)");
+        hl.addColorStop(0.5, "rgba(255,255,255,0.08)");
+        hl.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = hl;
+        rrect(ctx, cx, cy, ctaW, ctaH * 0.55, 28 * F);
+        ctx.fill();
+
+        // Borda sutil — profundidade de material
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,255,255,0.18)`;
+        ctx.lineWidth = 1.5 * F;
+        rrect(ctx, cx, cy, ctaW, ctaH, 28 * F);
+        ctx.stroke();
+        ctx.restore();
+
+        // Texto do CTA
+        ctx.save();
+        ctx.font = ctaFont;
+        ctx.shadowColor = "rgba(0,0,0,0.35)";
+        ctx.shadowBlur = 6 * F;
+        ctx.shadowOffsetY = 1.5 * F;
+        ctx.fillStyle = "#000000";
+        ctx.textBaseline = "middle";
+        ctx.fillText(sl.cta, cx + 30 * F, cy + ctaH * 0.5);
+        ctx.textBaseline = "alphabetic";
+        ctx.restore();
+      }
+    };
+
+    // ── Fallback: sem imagem da IA ─────────────────────────────────
     const drawFallback = () => {
       const GC: Record<string, [string, string]> = {
         dramatic: ["#030318", "#06103a"],
@@ -323,7 +350,7 @@ if (accentRgb) {
       }
     };
 
-    // ── Fluxo principal ──────────────────────────────────────────
+    // ── Fluxo principal ────────────────────────────────────────────
     if (imgSrc) {
       const img = new Image();
       img.crossOrigin = "anonymous";
