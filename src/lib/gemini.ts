@@ -5,15 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 export async function callGemini(
   sl: ProcessedSlide,
   varIdx: number,
-  apiKey: string,
   faceB64: string,
-  demo: boolean
 ): Promise<string | null> {
-  if (demo) {
-    await new Promise(r => setTimeout(r, 500 + varIdx * 150 + Math.random() * 500));
-    return null;
-  }
-
   // Stagger requests to avoid hitting rate limits
   if (varIdx > 0) {
     await new Promise(r => setTimeout(r, varIdx * 3000));
