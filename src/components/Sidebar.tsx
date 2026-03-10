@@ -4,9 +4,9 @@ import { ChipGroup } from './ChipGroup';
 import type { StyleKey, LightKey, FormatKey, ResKey } from '@/lib/parser';
 
 export function Sidebar() {
-  const { rawText, setRawText, style, setStyle, light, setLight, fmt, setFmt, res, setRes, isGenerating, startGeneration, apiKey, demo } = useCarousel();
+  const { rawText, setRawText, style, setStyle, light, setLight, fmt, setFmt, res, setRes, isGenerating, startGeneration } = useCarousel();
 
-  const canGenerate = rawText.trim() && (apiKey || demo) && !isGenerating;
+  const canGenerate = rawText.trim().length > 0 && !isGenerating;
 
   return (
     <aside className="bg-popover border-r border-border2 flex flex-col sticky top-[60px] h-[calc(100vh-60px)] overflow-y-auto shadow-[2px_0_20px_hsl(var(--primary)/0.03)]">

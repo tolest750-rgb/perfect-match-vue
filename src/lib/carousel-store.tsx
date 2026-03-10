@@ -4,14 +4,11 @@ import { parseSlides } from "./parser";
 import { buildPrompt, buildLayout } from "./prompts";
 import { callGemini } from "./gemini";
 import { composeSlide } from "./compositor";
-import { supabase } from "@/integrations/supabase/client";
 
 interface CarouselState {
   faceB64: string;
   faceDataUrl: string;
   faceName: string;
-  apiKey: string;
-  demo: boolean;
   style: StyleKey;
   light: LightKey;
   fmt: FormatKey;
@@ -30,8 +27,6 @@ interface CarouselState {
 
 interface CarouselActions {
   setFace: (file: File) => void;
-  setApiKey: (key: string) => void;
-  setDemo: (on: boolean) => void;
   setStyle: (s: StyleKey) => void;
   setLight: (l: LightKey) => void;
   setFmt: (f: FormatKey) => void;
@@ -40,8 +35,6 @@ interface CarouselActions {
   startGeneration: () => Promise<void>;
   regenVar: (slideIdx: number, varIdx: number) => Promise<void>;
   getVarBlob: (slideIdx: number, varIdx: number) => Blob | null;
-  testApi: () => Promise<{ ok: boolean; message: string }>;
-  saveConfig: () => void;
 }
 
 const CarouselContext = createContext<(CarouselState & CarouselActions) | null>(null);
@@ -52,12 +45,20 @@ export function useCarousel() {
   return ctx;
 }
 
+const PERSON_KEYWORDS = [
+  "pessoa", "homem", "mulher", "menino", "menina", "criança",
+  "executivo", "empresário", "líder", "atleta", "médico", "profissional",
+  "founder", "person", "man", "woman", "boy", "girl", "child", "human",
+  "ceo", "speaker",
+];
+
+const visualMentionsPerson = (visual: string) =>
+  PERSON_KEYWORDS.some((kw) => visual.toLowerCase().includes(kw));
+
 export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const [faceB64, setFaceB64] = useState("");
   const [faceDataUrl, setFaceDataUrl] = useState("");
   const [faceName, setFaceName] = useState("");
-  const [apiKey, setApiKeyState] = useState(() => localStorage.getItem("nb_key") || "");
-  const [demo, setDemoState] = useState(() => localStorage.getItem("nb_demo") === "true");
   const [style, setStyle] = useState<StyleKey>("cinematic");
   const [light, setLight] = useState<LightKey>("dramatic");
   const [fmt, setFmt] = useState<FormatKey>("4:5");
@@ -89,28 +90,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     r.readAsDataURL(file);
   }, []);
 
-  const setApiKey = useCallback((key: string) => setApiKeyState(key), []);
-  const setDemo = useCallback((on: boolean) => setDemoState(on), []);
-
-  const saveConfig = useCallback(() => {
-    localStorage.setItem("nb_key", apiKey);
-    localStorage.setItem("nb_demo", String(demo));
-  }, [apiKey, demo]);
-
-  const testApi = useCallback(async (): Promise<{ ok: boolean; message: string }> => {
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-image', {
-        body: { prompt: 'Generate a simple test image of a blue circle on white background.' },
-      });
-      if (error) return { ok: false, message: error.message || 'Edge function error' };
-      if (data?.error) return { ok: false, message: data.error };
-      if (data?.imageUrl) return { ok: true, message: "CONNECTED // NANO_BANANA_PRO_ONLINE" };
-      return { ok: false, message: "Unexpected response" };
-    } catch (e: any) {
-      return { ok: false, message: "NETWORK_ERROR: " + e.message };
-    }
-  }, []);
-
   const setVarUrl = (slideIdx: number, varIdx: number, url: string) => {
     setVarUrls((prev) => ({ ...prev, [`${slideIdx}_${varIdx}`]: url }));
   };
@@ -132,34 +111,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
 
     const parsed = parseSlides(rawText);
     if (!parsed.length) return;
-
-    // Detecta se o campo VISUAL do slide menciona uma pessoa
-    const PERSON_KEYWORDS = [
-      "pessoa",
-      "homem",
-      "mulher",
-      "menino",
-      "menina",
-      "criança",
-      "executivo",
-      "empresário",
-      "líder",
-      "atleta",
-      "médico",
-      "profissional",
-      "founder",
-      "person",
-      "man",
-      "woman",
-      "boy",
-      "girl",
-      "child",
-      "human",
-      "ceo",
-      "speaker",
-    ];
-
-    const visualMentionsPerson = (visual: string) => PERSON_KEYWORDS.some((kw) => visual.toLowerCase().includes(kw));
 
     const hasFaceRef = !!faceB64Ref.current;
 
@@ -195,7 +146,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
       [0, 1, 2, 3].forEach((v) => setVarStatus(i, v, "generating"));
 
       try {
-        const imgJobs = [0, 1, 2, 3].map((v) => callGemini(processedSlides[i], v, apiKey, faceB64Ref.current, demo));
+        const imgJobs = [0, 1, 2, 3].map((v) => callGemini(processedSlides[i], v, faceB64Ref.current));
         const results = await Promise.allSettled(imgJobs);
         setSlideStep(i, 1, "done");
         setSlideStep(i, 2, "active");
@@ -229,17 +180,16 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     setProgress({ done: processedSlides.length, total: processedSlides.length });
     setIsGenerating(false);
     setGenerationComplete(true);
-  }, [rawText, apiKey, demo, style, light, fmt, res]);
+  }, [rawText, style, light, fmt, res]);
 
   const regenVar = useCallback(
     async (slideIdx: number, varIdx: number) => {
-      if (!demo) return;
       const sl = slides[slideIdx];
       if (!sl) return;
       setVarStatus(slideIdx, varIdx, "generating");
 
       try {
-        const src = await callGemini(sl, varIdx, apiKey, faceB64Ref.current, demo);
+        const src = await callGemini(sl, varIdx, faceB64Ref.current);
         const blob = await composeSlide(src, sl, faceB64Ref.current);
         const url = URL.createObjectURL(blob);
         setVarUrl(slideIdx, varIdx, url);
@@ -253,7 +203,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
         setVarStatus(slideIdx, varIdx, "error");
       }
     },
-    [apiKey, demo, slides],
+    [slides],
   );
 
   const getVarBlob = useCallback(
@@ -267,8 +217,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     faceB64,
     faceDataUrl,
     faceName,
-    apiKey,
-    demo,
     style,
     light,
     fmt,
@@ -284,8 +232,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     progress,
     generationComplete,
     setFace,
-    setApiKey,
-    setDemo,
     setStyle,
     setLight,
     setFmt,
@@ -294,8 +240,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     startGeneration,
     regenVar,
     getVarBlob,
-    testApi,
-    saveConfig,
   };
 
   return <CarouselContext.Provider value={value}>{children}</CarouselContext.Provider>;
