@@ -209,19 +209,22 @@ export function buildPrompt(
 
   const faceInstruction = hasPerson
     ? [
-        'CRITICAL INSTRUCTION — FACE REFERENCE USAGE:',
-        'A reference photo is attached. Use it ONLY to extract the facial identity of the person.',
-        'DO NOT reproduce, paste, composite or reuse the reference photo background, clothing, pose or lighting.',
-        'Study ONLY the unique facial features: face shape, eye color/shape, skin tone, nose, lips, jawline, brow, hair.',
-        'GENERATE a completely new photograph of this same person FROM SCRATCH, naturally in the scene described below.',
-        'The face must be unmistakably the same individual. Zero influence from the reference except facial identity.',
+        'FACE REFERENCE IMAGE ATTACHED:',
+        'Use the face reference photo ONLY to extract facial identity (face shape, eyes, skin tone, nose, lips, jawline, brow, hair).',
+        'DO NOT copy the reference background, clothing, pose, or lighting.',
+        'Generate a completely new photograph of this same person FROM SCRATCH in the scene below.',
       ].join(' ')
     : '';
 
   const compositionInstruction = getCompositionInstruction(layoutPos, fmt);
-  const textElementsHint = buildTextElementsHint(sl, layoutPos);
 
   const pos = [
+    "LAYOUT REFERENCE IMAGE ATTACHED:",
+    "A LAYOUT REFERENCE image is provided showing the exact visual style to follow.",
+    "Study the reference for: text positioning zones, dark gradient areas, subject placement, and overall composition balance.",
+    "The generated image must leave identical clean/dark zones for text overlay as shown in the reference.",
+    "DO NOT generate any text, typography, letters, or words in the image — only the photographic scene.",
+    "",
     faceInstruction,
     "",
     "SCENE DESCRIPTION:",
@@ -230,11 +233,8 @@ export function buildPrompt(
     LIGHTS[light],
     sl.design || "",
     "",
-    "LAYOUT & COMPOSITION RULES:",
+    "COMPOSITION RULES:",
     compositionInstruction,
-    "",
-    "TYPOGRAPHY SAFE ZONE — MANDATORY:",
-    textElementsHint,
     "",
     "QUALITY:",
     "professional commercial photography, dramatic atmospheric depth, cinematic bokeh, subject in sharp focus, dark rich background, high production value",
