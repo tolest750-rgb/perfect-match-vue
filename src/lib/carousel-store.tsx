@@ -106,6 +106,8 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
 
   const faceB64Ref = useRef(faceB64);
   faceB64Ref.current = faceB64;
+  const layoutRefB64Ref = useRef(layoutRefB64);
+  layoutRefB64Ref.current = layoutRefB64;
 
   const setFace = useCallback((file: File) => {
     const r = new FileReader();
