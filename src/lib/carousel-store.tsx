@@ -30,6 +30,7 @@ interface CarouselState {
 
 interface CarouselActions {
   setFace: (file: File) => void;
+  setLayoutRef: (file: File) => void;
   setStyle: (s: StyleKey) => void;
   setLight: (l: LightKey) => void;
   setFmt: (f: FormatKey) => void;
