@@ -747,8 +747,7 @@ export async function composeSlide(
       const isFirst = sl.n === 1;
       const slideAlign: "left" | "center" | "right" = isFirst || isLast ? "center" : sl.n % 2 === 0 ? "left" : "right";
 
-      // ── Análise da imagem: detecta se topo ou base tem mais espaço limpo
-      const imgAnalysis = analyzeImageRegions(ctx, CW, CH);
+      // ── Análise da imagem: reutiliza imgAnalysis calculado no bloco do gradiente
       const bestV = imgAnalysis.bestZone; // "top" | "bottom"
 
       // Compõe textZone combinando análise vertical + regra editorial de alinhamento horizontal
