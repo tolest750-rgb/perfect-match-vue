@@ -622,24 +622,34 @@ export async function composeSlide(
   const accent: string = (sl.layout as any)?.accent ?? ACC[sl.light as LightKey] ?? "#c8ff00";
   const accentRgb = hexToRgb(accent) ?? "200,255,0";
 
-  // ── Tipografia ──────────────────────────────────────────────
+  // ── Tipografia Inteligente ─────────────────────────────────
   const NUM_SIZE = Math.round(14 * F);
-  const SUB_SIZE = Math.round(34 * F);
   const CTA_SIZE = Math.round(20 * F);
 
-  // Tamanho dinâmico do título baseado no número de caracteres
+  // Tamanho dinâmico do título baseado no número de caracteres + número de palavras
   const titleLen = (sl.titulo ?? "").length;
-  const TTL_SIZE = Math.round((titleLen <= 20 ? 96 : titleLen <= 35 ? 78 : titleLen <= 50 ? 62 : 50) * F);
+  const titleWords = (sl.titulo ?? "").split(/\s+/).length;
+  // Títulos curtos e impactantes = maiores. Longos = menores mas legíveis.
+  const TTL_SIZE = Math.round(
+    (titleLen <= 12 ? 110 : titleLen <= 20 ? 96 : titleLen <= 30 ? 80 : titleLen <= 45 ? 66 : titleLen <= 60 ? 54 : 46) * F
+  );
+
+  // Subtítulo: proporcional mas com teto
+  const SUB_SIZE = Math.round(Math.min(38, Math.max(26, TTL_SIZE * 0.38)) * F);
 
   const numFont = `700 ${NUM_SIZE}px 'Bricolage Grotesque', sans-serif`;
-  const tFont = `800 ${TTL_SIZE}px 'Bricolage Grotesque', sans-serif`;
-  const sFont = `400 ${SUB_SIZE}px 'Bricolage Grotesque', sans-serif`;
+  const tFont = `900 ${TTL_SIZE}px 'Bricolage Grotesque', sans-serif`;
+  const sFont = `300 ${SUB_SIZE}px 'Bricolage Grotesque', sans-serif`;
   const ctaFont = `700 ${CTA_SIZE}px 'Bricolage Grotesque', sans-serif`;
 
-  const tLH = TTL_SIZE * F * 0.96; // line height título
-  const sLH = SUB_SIZE * F * 1.5; // line height subtítulo
-  const GAP_TS = 28 * F; // gap título → subtítulo
-  const GAP_SC = 24 * F; // gap subtítulo → CTA
+  // Line height dinâmico: títulos curtos = mais apertado (impacto), longos = mais respiro
+  const tLH = TTL_SIZE * (titleWords <= 3 ? 1.05 : titleWords <= 5 ? 1.0 : 0.92);
+  const sLH = SUB_SIZE * 1.45;
+  // Tracking: títulos curtos ganham mais tracking para presença
+  const titleTracking = titleLen <= 15 ? 6 * F : titleLen <= 30 ? 2 * F : 0;
+
+  const GAP_TS = Math.round((titleWords <= 3 ? 34 : 24) * F);
+  const GAP_SC = 24 * F;
   const CTA_H = 58 * F;
 
   return new Promise<Blob>((resolve) => {
