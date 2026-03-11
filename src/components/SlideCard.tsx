@@ -45,7 +45,8 @@ async function upscaleBlob(blob: Blob): Promise<Blob> {
 export function SlideCard({ slide, index, onImageClick, selectedVars, onToggleVar, selectionMode }: SlideCardProps) {
   const [expanded, setExpanded] = useState(true);
   const [enhancing, setEnhancing] = useState<Record<string, boolean>>({});
-  const { varUrls, varStatuses, slideStatuses, slideSteps, regenVar, getVarBlob, faceDataUrl } = useCarousel();
+  const { varUrls, varStatuses, varErrors, slideStatuses, slideSteps, regenVar, getVarBlob, faceDataUrl } =
+    useCarousel();
 
   const status = slideStatuses[index] || "idle";
   const statusLabel = { idle: "IDLE", processing: "PROCESSING", complete: "COMPLETE", error: "ERROR" }[status];
@@ -204,9 +205,21 @@ export function SlideCard({ slide, index, onImageClick, selectedVars, onToggleVa
                           <span>GERANDO</span>
                         </div>
                       ) : varStatus === "error" ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
-                          <span className="text-lg text-destructive">✕</span>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3">
+                          <span className="text-xl text-destructive">✕</span>
                           <span className="text-[7px] text-destructive tracking-[1px] font-mono">FALHOU</span>
+                          {varErrors?.[key] && (
+                            <span className="text-[8px] text-destructive/70 font-mono text-center leading-relaxed break-words max-w-full bg-destructive/[0.07] border border-destructive/20 rounded-sm px-2 py-1.5">
+                              {varErrors[key].slice(0, 180)}
+                              {varErrors[key].length > 180 ? "…" : ""}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => regenVar(index, v)}
+                            className="font-mono text-[8px] tracking-[1px] border border-destructive/40 text-destructive rounded-sm px-2.5 py-1 hover:bg-destructive/10 transition-colors mt-1"
+                          >
+                            ↺ TENTAR NOVAMENTE
+                          </button>
                         </div>
                       ) : url ? (
                         <>
