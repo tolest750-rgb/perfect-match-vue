@@ -3,8 +3,7 @@ import type { ProcessedSlide, StyleKey, LightKey, FormatKey, ResKey, LayoutPosit
 import { parseSlides } from "./parser";
 import { buildPrompt, buildLayout, visualHasPerson, visualMentionsNamedPerson, detectTitleStyle } from "./prompts";
 import type { TitleStyle } from "./prompts";
-import { analyzeLayout, composeSlide } from "./compositor";
-import { visualHasTitleInImage } from "./prompts";
+import { analyzeLayout, composeSlide, visualHasTitleInImage } from "./compositor";
 import type { AILayout } from "./compositor";
 import { callGemini } from "./gemini";
 
@@ -46,6 +45,7 @@ interface CarouselState {
   composedBlobs: Record<number, (Blob | null)[]>;
   varUrls: Record<string, string>;
   varStatuses: Record<string, "idle" | "generating" | "done" | "error">;
+  varErrors: Record<string, string>;
   slideStatuses: Record<number, "idle" | "processing" | "complete" | "error">;
   isGenerating: boolean;
   isStopping: boolean;
@@ -162,6 +162,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const [varUrls, setVarUrls] = useState<Record<string, string>>({});
   const [varStatuses, setVarStatuses] = useState<Record<string, "idle" | "generating" | "done" | "error">>({});
   const [slideStatuses, setSlideStatuses] = useState<Record<number, "idle" | "processing" | "complete" | "error">>({});
+  const [varErrors, setVarErrors] = useState<Record<string, string>>({});
   const [isGenerating, setIsGenerating] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -353,6 +354,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     setComposedBlobs({});
     setVarUrls({});
     setVarStatuses({});
+    setVarErrors({});
     setSlideStatuses({});
     setSlideSteps({});
     setIsGenerating(true);
@@ -388,7 +390,12 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
               if (!firstThumbUrl && i === 0 && v === 0) firstThumbUrl = url;
               setComposedBlobs((prev) => ({ ...prev, [i]: [...newBlobs[i]] }));
             })
-            .catch(() => setVarStatus(i, v, "error")),
+            .catch((err: unknown) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.error(`[slide ${i} var ${v}]`, msg);
+              setVarErrors((p) => ({ ...p, [`${i}_${v}`]: msg }));
+              setVarStatus(i, v, "error");
+            }),
         );
         await Promise.all(varJobs);
         if (!stopRef.current) setSlideStatus(i, "complete");
@@ -431,7 +438,10 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
           arr[varIdx] = blob;
           return { ...prev, [slideIdx]: arr };
         });
-      } catch {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[regen slide ${slideIdx} var ${varIdx}]`, msg);
+        setVarErrors((p) => ({ ...p, [`${slideIdx}_${varIdx}`]: msg }));
         setVarStatus(slideIdx, varIdx, "error");
       }
     },
@@ -456,6 +466,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     composedBlobs,
     varUrls,
     varStatuses,
+    varErrors,
     slideStatuses,
     isGenerating,
     isStopping,
