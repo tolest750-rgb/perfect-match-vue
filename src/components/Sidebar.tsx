@@ -1,10 +1,52 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useCarousel } from "@/lib/carousel-store";
 import type { HistoryEntry, FacePreset, LayoutPreset } from "@/lib/carousel-store";
 import { FaceUpload } from "./FaceUpload";
 import { LayoutRefUpload } from "./LayoutRefUpload";
 import { ChipGroup } from "./ChipGroup";
 import type { StyleKey, LightKey, FormatKey, ResKey } from "@/lib/parser";
+
+// ─── PARSER VISUAL: organiza o rawText em blocos por slide ──────
+interface SlideBlock {
+  num: number;
+  titulo?: string;
+  subtitulo?: string;
+  cta?: string;
+  visual?: string;
+  design?: string;
+}
+
+function parseRawToBlocks(raw: string): SlideBlock[] {
+  if (!raw.trim()) return [];
+  const chunks = raw.split(/\n\s*---\s*\n/);
+  return chunks.map((chunk, i) => {
+    const get = (keys: string[]) => {
+      for (const key of keys) {
+        const re = new RegExp(
+          `(?:^|\\n)\\s*${key}\\s*:?\\s*\\n([\\s\\S]*?)(?=\\n\\s*(?:TÍTULO|TITULO|SUBTÍTULO|SUBTITULO|CALL TO ACTION|CTA|VISUAL|OBSERVAÇÃO|OBSERVACAO|$))`,
+          "i",
+        );
+        const m = chunk.match(re);
+        if (m) return m[1].trim();
+      }
+      // fallback: "CAMPO: valor na mesma linha"
+      for (const key of keys) {
+        const re = new RegExp(`(?:^|\\n)\\s*${key}\\s*:\\s*(.+)`, "i");
+        const m = chunk.match(re);
+        if (m) return m[1].trim();
+      }
+      return undefined;
+    };
+    return {
+      num: i + 1,
+      titulo: get(["TÍTULO", "TITULO", "TITLE"]),
+      subtitulo: get(["SUBTÍTULO", "SUBTITULO", "SUBTITLE"]),
+      cta: get(["CALL TO ACTION", "CTA"]),
+      visual: get(["VISUAL"]),
+      design: get(["OBSERVAÇÃO DE DESIGN", "OBSERVACAO DE DESIGN", "DESIGN"]),
+    };
+  });
+}
 
 export function Sidebar() {
   const {
@@ -40,10 +82,28 @@ export function Sidebar() {
   const [activeTab, setActiveTab] = useState<"config" | "history">("config");
   const [facePresetName, setFacePresetName] = useState("");
   const [layoutPresetName, setLayoutPresetName] = useState("");
-  const [showFacePresets, setShowFacePresets] = useState(false);
-  const [showLayoutPresets, setShowLayoutPresets] = useState(false);
+  // Presets sempre visíveis por padrão (não dependem de upload)
+  const [showFacePresets, setShowFacePresets] = useState(true);
+  const [showLayoutPresets, setShowLayoutPresets] = useState(true);
+  const [textMode, setTextMode] = useState<"edit" | "preview">("edit");
+  const [copied, setCopied] = useState(false);
 
   const canGenerate = rawText.trim().length > 0 && !isGenerating;
+  const slideBlocks = useMemo(() => parseRawToBlocks(rawText), [rawText]);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(rawText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleClear = () => {
+    if (!rawText.trim()) return;
+    if (window.confirm("Apagar todo o texto do roteiro?")) {
+      setRawText("");
+      setTextMode("edit");
+    }
+  };
 
   return (
     <aside className="bg-popover border-r border-border2 flex flex-col sticky top-[60px] h-[calc(100vh-60px)] overflow-y-auto shadow-[2px_0_20px_hsl(var(--primary)/0.03)]">
@@ -66,11 +126,12 @@ export function Sidebar() {
 
       {activeTab === "config" && (
         <>
-          {/* Face Upload + Presets */}
+          {/* ── Face Upload + Presets ─────────────────────── */}
           <div className="border-b border-border2">
             <FaceUpload />
-            {faceDataUrl && (
-              <div className="px-4 pb-3 flex flex-col gap-1.5">
+            <div className="px-4 pb-3 flex flex-col gap-1.5">
+              {/* Input salvar preset: só aparece com face carregada */}
+              {faceDataUrl && (
                 <div className="flex gap-1.5">
                   <input
                     value={facePresetName}
@@ -90,48 +151,57 @@ export function Sidebar() {
                     SALVAR
                   </button>
                 </div>
-                {facePresets.length > 0 && (
+              )}
+
+              {/* Presets SEMPRE visíveis se existirem */}
+              {facePresets.length > 0 && (
+                <>
                   <button
                     onClick={() => setShowFacePresets((v) => !v)}
                     className="text-left font-mono text-[8px] tracking-[1px] text-muted-foreground hover:text-primary transition-colors"
                   >
-                    {showFacePresets ? "▾" : "▸"} PRESETS SALVOS ({facePresets.length})
+                    {showFacePresets ? "▾" : "▸"} FACE PRESETS ({facePresets.length})
                   </button>
-                )}
-                {showFacePresets && (
-                  <div className="flex flex-col gap-1">
-                    {facePresets.map((p) => (
-                      <div
-                        key={p.id}
-                        className="flex items-center gap-2 bg-card border border-border2 rounded-sm p-1.5"
-                      >
-                        <img src={p.dataUrl} className="w-6 h-6 rounded-full object-cover border border-primary/30" />
-                        <span className="flex-1 font-mono text-[9px] text-foreground truncate">{p.name}</span>
-                        <button
+                  {showFacePresets && (
+                    <div className="flex flex-col gap-1">
+                      {facePresets.map((p) => (
+                        <div
+                          key={p.id}
                           onClick={() => applyFacePreset(p)}
-                          className="font-mono text-[8px] text-primary hover:underline"
+                          title={`Usar: ${p.name}`}
+                          className="flex items-center gap-2 bg-card border border-border2 rounded-sm p-1.5 cursor-pointer hover:border-primary hover:bg-primary/[0.04] transition-all duration-150 group/fp"
                         >
-                          USAR
-                        </button>
-                        <button
-                          onClick={() => deleteFacePreset(p.id)}
-                          className="font-mono text-[8px] text-destructive hover:underline"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                          <img
+                            src={p.dataUrl}
+                            className="w-6 h-6 rounded-full object-cover border border-primary/30 group-hover/fp:border-primary transition-colors"
+                          />
+                          <span className="flex-1 font-mono text-[9px] text-foreground truncate">{p.name}</span>
+                          <span className="font-mono text-[7px] text-primary opacity-0 group-hover/fp:opacity-100 transition-opacity tracking-[1px]">
+                            USAR ↵
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteFacePreset(p.id);
+                            }}
+                            className="font-mono text-[8px] text-muted-foreground hover:text-destructive transition-colors ml-1"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
-          {/* Layout Ref + Presets */}
+          {/* ── Layout Ref + Presets ──────────────────────── */}
           <div className="border-b border-border2">
             <LayoutRefUpload />
-            {layoutRefDataUrl && (
-              <div className="px-4 pb-3 flex flex-col gap-1.5">
+            <div className="px-4 pb-3 flex flex-col gap-1.5">
+              {layoutRefDataUrl && (
                 <div className="flex gap-1.5">
                   <input
                     value={layoutPresetName}
@@ -151,69 +221,155 @@ export function Sidebar() {
                     SALVAR
                   </button>
                 </div>
-                {layoutPresets.length > 0 && (
+              )}
+
+              {layoutPresets.length > 0 && (
+                <>
                   <button
                     onClick={() => setShowLayoutPresets((v) => !v)}
                     className="text-left font-mono text-[8px] tracking-[1px] text-muted-foreground hover:text-primary transition-colors"
                   >
-                    {showLayoutPresets ? "▾" : "▸"} PRESETS SALVOS ({layoutPresets.length})
+                    {showLayoutPresets ? "▾" : "▸"} LAYOUT PRESETS ({layoutPresets.length})
                   </button>
-                )}
-                {showLayoutPresets && (
-                  <div className="flex flex-col gap-1">
-                    {layoutPresets.map((p) => (
-                      <div
-                        key={p.id}
-                        className="flex items-center gap-2 bg-card border border-border2 rounded-sm p-1.5"
-                      >
-                        <img src={p.dataUrl} className="w-8 h-8 object-cover rounded-sm border border-primary/30" />
-                        <span className="flex-1 font-mono text-[9px] text-foreground truncate">{p.name}</span>
-                        <button
+                  {showLayoutPresets && (
+                    <div className="flex flex-col gap-1">
+                      {layoutPresets.map((p) => (
+                        <div
+                          key={p.id}
                           onClick={() => applyLayoutPreset(p)}
-                          className="font-mono text-[8px] text-primary hover:underline"
+                          title={`Usar: ${p.name}`}
+                          className="flex items-center gap-2 bg-card border border-border2 rounded-sm p-1.5 cursor-pointer hover:border-primary hover:bg-primary/[0.04] transition-all duration-150 group/lp"
                         >
-                          USAR
-                        </button>
-                        <button
-                          onClick={() => deleteLayoutPreset(p.id)}
-                          className="font-mono text-[8px] text-destructive hover:underline"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                          <img
+                            src={p.dataUrl}
+                            className="w-8 h-8 object-cover rounded-sm border border-primary/30 group-hover/lp:border-primary transition-colors"
+                          />
+                          <span className="flex-1 font-mono text-[9px] text-foreground truncate">{p.name}</span>
+                          <span className="font-mono text-[7px] text-primary opacity-0 group-hover/lp:opacity-100 transition-opacity tracking-[1px]">
+                            USAR ↵
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteLayoutPreset(p.id);
+                            }}
+                            className="font-mono text-[8px] text-muted-foreground hover:text-destructive transition-colors ml-1"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
-          {/* Carousel Data */}
+          {/* ── Carousel Data ─────────────────────────────── */}
           <div className="p-4 border-b border-border relative group">
             <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-transparent transition-all duration-300 group-hover:bg-primary group-hover:shadow-[0_0_8px_hsl(var(--primary))]" />
-            <div className="font-mono text-[9px] tracking-[2.5px] uppercase text-muted-foreground mb-2.5 flex items-center gap-2">
+
+            <div className="font-mono text-[9px] tracking-[2.5px] uppercase text-muted-foreground mb-2 flex items-center gap-2">
               <span className="text-primary" style={{ textShadow: "0 0 6px hsl(var(--primary))" }}>
                 ◈
               </span>
               CAROUSEL_DATA
+              {slideBlocks.length > 0 && (
+                <span className="font-mono text-[7px] bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded-sm">
+                  {slideBlocks.length} SL
+                </span>
+              )}
               <span className="flex-1 h-px bg-gradient-to-r from-border2 to-transparent" />
             </div>
-            <textarea
-              value={rawText}
-              onChange={(e) => setRawText(e.target.value)}
-              placeholder="Cole aqui o conteúdo do carousel separado por ---"
-              className="w-full bg-card border border-border2 rounded-sm text-foreground font-mono text-[11px] py-2 px-3 outline-none transition-all duration-200 caret-primary resize-y min-h-[120px] leading-relaxed focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary)/0.2),0_0_16px_hsl(var(--primary)/0.06),inset_0_0_8px_hsl(var(--primary)/0.04)] focus:text-neon2 placeholder:text-muted-foreground"
-            />
-            <div className="font-mono text-[8px] text-muted-foreground mt-1 leading-relaxed tracking-[0.5px]">
+
+            {/* Toggle editar / preview */}
+            {rawText.trim().length > 0 && (
+              <div className="flex gap-1 mb-2">
+                {(["edit", "preview"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setTextMode(mode)}
+                    className={`flex-1 font-mono text-[8px] tracking-[1px] py-1 rounded-sm border transition-all duration-150 ${
+                      textMode === mode
+                        ? "bg-primary/10 border-primary/40 text-primary"
+                        : "bg-card border-border2 text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                    }`}
+                  >
+                    {mode === "edit" ? "✎ EDITAR" : "◧ PREVIEW"}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Textarea */}
+            {textMode === "edit" && (
+              <textarea
+                value={rawText}
+                onChange={(e) => setRawText(e.target.value)}
+                placeholder="Cole aqui o conteúdo do carousel separado por ---"
+                className="w-full bg-card border border-border2 rounded-sm text-foreground font-mono text-[11px] py-2 px-3 outline-none transition-all duration-200 caret-primary resize-y min-h-[120px] leading-relaxed focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary)/0.2),0_0_16px_hsl(var(--primary)/0.06),inset_0_0_8px_hsl(var(--primary)/0.04)] focus:text-neon2 placeholder:text-muted-foreground"
+              />
+            )}
+
+            {/* Preview por blocos */}
+            {textMode === "preview" && slideBlocks.length > 0 && (
+              <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
+                {slideBlocks.map((sl) => (
+                  <div
+                    key={sl.num}
+                    className="bg-card border border-border2 rounded-sm overflow-hidden hover:border-primary/20 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 px-2.5 py-1.5 bg-background/60 border-b border-border2">
+                      <span
+                        className="font-mono text-[8px] tracking-[2px] text-primary border border-primary/30 px-1.5 py-0.5 rounded-sm shrink-0"
+                        style={{ textShadow: "0 0 6px hsl(var(--primary))" }}
+                      >
+                        SL_{String(sl.num).padStart(2, "0")}
+                      </span>
+                      {sl.titulo && (
+                        <span className="font-mono text-[9px] text-foreground font-semibold truncate">{sl.titulo}</span>
+                      )}
+                    </div>
+                    <div className="px-2.5 py-2 flex flex-col gap-1.5">
+                      {sl.subtitulo && <PreviewField label="SUB" value={sl.subtitulo} />}
+                      {sl.cta && <PreviewField label="CTA" value={sl.cta} accent />}
+                      {sl.visual && <PreviewField label="VIS" value={sl.visual} muted truncate />}
+                      {sl.design && <PreviewField label="DSG" value={sl.design} muted truncate />}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Ações COPIAR / APAGAR */}
+            <div className="flex gap-1.5 mt-2">
+              <button
+                onClick={handleCopy}
+                disabled={!rawText.trim()}
+                className="flex-1 bg-card border border-border2 rounded-sm text-muted-foreground font-mono text-[8px] tracking-[1px] py-1.5 transition-all duration-200 hover:border-primary hover:text-primary hover:shadow-[0_0_6px_hsl(var(--neon-dim)/0.07)] disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                {copied ? "✓ COPIADO" : "⎘ COPIAR"}
+              </button>
+              <button
+                onClick={handleClear}
+                disabled={!rawText.trim()}
+                className="flex-1 bg-card border border-border2 rounded-sm text-muted-foreground font-mono text-[8px] tracking-[1px] py-1.5 transition-all duration-200 hover:border-destructive hover:text-destructive disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                ✕ APAGAR
+              </button>
+            </div>
+
+            <div className="font-mono text-[8px] text-muted-foreground mt-1.5 leading-relaxed tracking-[0.5px]">
               Separe slides com{" "}
               <code className="bg-card-2 border border-border2 px-1 py-0.5 rounded-sm font-mono text-[9px] text-neon2">
                 ---
               </code>
-              . Use campos: TÍTULO, SUBTÍTULO, CTA, VISUAL
+              . Campos: TÍTULO, SUBTÍTULO, CTA, VISUAL
             </div>
           </div>
 
-          {/* Parameters */}
+          {/* ── Parameters ────────────────────────────────── */}
           <div className="p-4 border-b border-border relative group">
             <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-transparent transition-all duration-300 group-hover:bg-primary group-hover:shadow-[0_0_8px_hsl(var(--primary))]" />
             <div className="font-mono text-[9px] tracking-[2.5px] uppercase text-muted-foreground mb-2.5 flex items-center gap-2">
@@ -267,7 +423,7 @@ export function Sidebar() {
             />
           </div>
 
-          {/* Generate / Stop */}
+          {/* ── Generate / Stop ───────────────────────────── */}
           <div className="p-4 flex flex-col gap-2">
             <button
               onClick={startGeneration}
@@ -293,6 +449,7 @@ export function Sidebar() {
         </>
       )}
 
+      {/* ── Histórico ─────────────────────────────────────── */}
       {activeTab === "history" && (
         <div className="flex flex-col gap-0 flex-1">
           {history.length === 0 ? (
@@ -311,6 +468,41 @@ export function Sidebar() {
   );
 }
 
+// ─── PREVIEW FIELD ────────────────────────────────────────────
+function PreviewField({
+  label,
+  value,
+  accent,
+  muted,
+  truncate,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  muted?: boolean;
+  truncate?: boolean;
+}) {
+  return (
+    <div className="flex gap-1.5 items-start">
+      <span
+        className={`font-mono text-[7px] tracking-[1px] py-0.5 px-1 rounded-sm border shrink-0 mt-0.5 ${
+          accent ? "bg-primary/10 text-primary border-primary/25" : "bg-card-2 text-muted-foreground border-border2"
+        }`}
+      >
+        {label}
+      </span>
+      <span
+        className={`font-mono text-[9px] leading-relaxed ${truncate ? "line-clamp-2" : ""} ${
+          muted ? "text-muted-foreground" : accent ? "text-primary" : "text-foreground"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// ─── HISTORY CARD ─────────────────────────────────────────────
 function HistoryCard({
   entry,
   onLoad,
@@ -327,15 +519,8 @@ function HistoryCard({
     hour: "2-digit",
     minute: "2-digit",
   });
-
-  const copyRaw = () => navigator.clipboard.writeText(entry.rawText);
-  const handleDelete = async () => {
-    setDeleting(true);
-    await onDelete(entry.id);
-  };
-
   return (
-    <div className="border-b border-border2 p-3 flex gap-2.5 hover:bg-card/40 transition-colors group/hcard">
+    <div className="border-b border-border2 p-3 flex gap-2.5 hover:bg-card/40 transition-colors">
       {entry.thumbUrl && (
         <img src={entry.thumbUrl} className="w-12 h-[60px] object-cover rounded-sm border border-border2 shrink-0" />
       )}
@@ -360,13 +545,16 @@ function HistoryCard({
             ↩ CARREGAR
           </button>
           <button
-            onClick={copyRaw}
+            onClick={() => navigator.clipboard.writeText(entry.rawText)}
             className="font-mono text-[8px] tracking-[1px] bg-card border border-border2 rounded-sm px-2 py-0.5 text-foreground hover:border-primary hover:text-primary transition-colors"
           >
             ⎘ COPIAR
           </button>
           <button
-            onClick={handleDelete}
+            onClick={async () => {
+              setDeleting(true);
+              await onDelete(entry.id);
+            }}
             disabled={deleting}
             className="font-mono text-[8px] tracking-[1px] bg-card border border-border2 rounded-sm px-2 py-0.5 text-destructive hover:border-destructive transition-colors disabled:opacity-40"
           >
