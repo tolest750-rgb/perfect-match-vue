@@ -183,9 +183,23 @@ export async function analyzeLayout(
 // CANVAS HELPERS
 // ─────────────────────────────────────────────────────────────
 
+// Smart word wrap with intelligent line breaking
+// Prioritizes breaking at natural phrase boundaries
 function wrapTxt(ctx: CanvasRenderingContext2D, txt: string, font: string, maxW: number, maxL: number): string[] {
   ctx.font = font;
   const words = txt.split(" ");
+  if (words.length <= 1) return [txt];
+
+  // For 2-line layouts, try to break at midpoint for visual balance
+  if (maxL === 2 && words.length >= 3) {
+    const mid = Math.ceil(words.length / 2);
+    const line1 = words.slice(0, mid).join(" ");
+    const line2 = words.slice(mid).join(" ");
+    if (ctx.measureText(line1).width <= maxW && ctx.measureText(line2).width <= maxW) {
+      return [line1, line2];
+    }
+  }
+
   const lines: string[] = [];
   let cur = "";
   for (const w of words) {
