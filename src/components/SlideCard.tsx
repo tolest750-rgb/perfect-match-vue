@@ -7,6 +7,9 @@ interface SlideCardProps {
   slide: ProcessedSlide;
   index: number;
   onImageClick: (src: string) => void;
+  selectedVars?: Set<string>; // "slideIndex_varIndex"
+  onToggleVar?: (key: string) => void;
+  selectionMode?: boolean;
 }
 
 async function upscaleBlob(blob: Blob): Promise<Blob> {
@@ -39,7 +42,7 @@ async function upscaleBlob(blob: Blob): Promise<Blob> {
   }
 }
 
-export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
+export function SlideCard({ slide, index, onImageClick, selectedVars, onToggleVar, selectionMode }: SlideCardProps) {
   const [expanded, setExpanded] = useState(true);
   const [enhancing, setEnhancing] = useState<Record<string, boolean>>({});
   const { varUrls, varStatuses, slideStatuses, slideSteps, regenVar, getVarBlob, faceDataUrl } = useCarousel();
@@ -182,7 +185,11 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
                 return (
                   <div
                     key={v}
-                    className="bg-background border border-border2 rounded-sm overflow-hidden flex flex-col relative transition-all duration-300 hover:border-primary/25 hover:shadow-[0_0_16px_hsl(var(--primary)/0.06)] group/var"
+                    className={`bg-background border rounded-sm overflow-hidden flex flex-col relative transition-all duration-300 group/var ${
+                      selectionMode && selectedVars?.has(key)
+                        ? "border-primary shadow-[0_0_16px_hsl(var(--primary)/0.25)]"
+                        : "border-border2 hover:border-primary/25 hover:shadow-[0_0_16px_hsl(var(--primary)/0.06)]"
+                    }`}
                   >
                     <div className="font-mono text-[7px] text-muted-foreground py-1 px-[7px] tracking-[2px] uppercase flex items-center gap-1">
                       <span
@@ -206,12 +213,40 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
                           <img
                             src={url}
                             alt=""
-                            onClick={() => onImageClick(url)}
-                            className="absolute inset-0 w-full h-full object-cover cursor-zoom-in transition-opacity duration-500 opacity-100 hover:brightness-105"
+                            onClick={() => (selectionMode ? onToggleVar?.(key) : onImageClick(url))}
+                            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 opacity-100 hover:brightness-105 ${selectionMode ? "cursor-pointer" : "cursor-zoom-in"}`}
                           />
-                          <span className="absolute top-1 right-1 bg-primary text-primary-foreground font-mono text-[7px] font-bold py-0.5 px-1 rounded-sm tracking-[1px] uppercase">
-                            OK
-                          </span>
+                          {/* Checkbox de seleção */}
+                          {selectionMode && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleVar?.(key);
+                              }}
+                              className={`absolute top-1.5 left-1.5 w-5 h-5 rounded-sm border-2 flex items-center justify-center transition-all duration-150 z-10 ${
+                                selectedVars?.has(key)
+                                  ? "bg-primary border-primary text-black shadow-[0_0_8px_hsl(var(--primary))]"
+                                  : "bg-black/40 border-white/60 backdrop-blur-sm hover:border-primary"
+                              }`}
+                            >
+                              {selectedVars?.has(key) && (
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                                  <path
+                                    d="M1.5 5L4 7.5L8.5 2.5"
+                                    stroke="black"
+                                    strokeWidth="1.8"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                              )}
+                            </button>
+                          )}
+                          {!selectionMode && (
+                            <span className="absolute top-1 right-1 bg-primary text-primary-foreground font-mono text-[7px] font-bold py-0.5 px-1 rounded-sm tracking-[1px] uppercase">
+                              OK
+                            </span>
+                          )}
                         </>
                       ) : (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-muted-foreground font-mono text-[8px] tracking-[1px]">
@@ -281,21 +316,9 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
               </div>
             )}
 
-            {!slide.useFaceRef && (slide as any).faceRefOmitReason && (
-              <div className="bg-background border border-warning/20 rounded-sm p-2 flex items-center gap-2 flex-wrap">
-                <span className="font-mono text-[8px] tracking-[1.5px] text-muted-foreground whitespace-nowrap">
-                  ◈ FACE_REF
-                </span>
-                <span className="font-mono text-[7px] tracking-[1px] py-0.5 px-1.5 rounded-sm uppercase bg-warning/[0.08] text-warning border border-warning/20 whitespace-nowrap">
-                  OMITIDO
-                </span>
-                <span className="font-mono text-[8px] text-muted-foreground whitespace-nowrap">—</span>
-                <span
-                  className="font-mono text-[8px] tracking-[0.5px] py-0.5 px-2 rounded-sm bg-destructive/[0.07] text-destructive border border-destructive/20 truncate max-w-[180px]"
-                  title={(slide as any).faceRefOmitReason}
-                >
-                  &quot;{(slide as any).faceRefOmitReason}&quot;
-                </span>
+            {!slide.useFaceRef && visualHasNamedPerson(slide.visual) && (
+              <div className="bg-background border border-border2 rounded-sm p-2 font-mono text-[8px] text-muted-foreground">
+                ◈ FACE_REF <span className="text-warning">OMITIDO</span> — nome próprio detectado no VISUAL
               </div>
             )}
 
@@ -319,6 +342,15 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
       )}
     </div>
   );
+}
+
+// Helper to check named person in visual (imported logic)
+function visualHasNamedPerson(visual: string): boolean {
+  const v = (visual ?? "").toLowerCase();
+  const knownNames = ["elon musk", "steve jobs", "bill gates", "mark zuckerberg"];
+  if (knownNames.some((n) => v.includes(n))) return true;
+  const pattern = /\b[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,}(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,})+\b/g;
+  return (visual.match(pattern) || []).length > 0;
 }
 
 function PromptBlock({

@@ -504,8 +504,8 @@ function getTextGeometry(
   blockH: number,
 ): TextGeometry {
   const SIDE_MARGIN = PAD_X;
-  const BOTTOM_PAD = PAD_Y * 1.4;
-  const TOP_PAD = PAD_Y * 2.4; // abaixo do número de slide
+  const BOTTOM_PAD = PAD_Y * 1.8; // mais respiro na base
+  const TOP_PAD = PAD_Y * 3.0; // abaixo do número de slide + respiro generoso
 
   switch (textZone) {
     case "bottom-left":
@@ -628,8 +628,8 @@ export async function composeSlide(
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
 
-  const PAD_X = Math.round(CW * 0.07);
-  const PAD_Y = Math.round(CH * 0.055);
+  const PAD_X = Math.round(CW * 0.1); // 10% — respiro lateral confortável
+  const PAD_Y = Math.round(CH * 0.065); // 6.5% — respiro vertical
 
   const accent: string = (sl.layout as any)?.accent ?? ACC[sl.light as LightKey] ?? "#c8ff00";
   const accentRgb = hexToRgb(accent) ?? "200,255,0";
@@ -764,7 +764,7 @@ export async function composeSlide(
               ? "bottom-left"
               : "bottom-right";
 
-      const mwRatio = 0.88;
+      const mwRatio = 0.8; // 80% da largura — 10% de margem em cada lado
       const maxTextW = CW * mwRatio;
 
       const tLines = (() => {
