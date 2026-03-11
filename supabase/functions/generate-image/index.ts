@@ -31,9 +31,11 @@ async function generateViaLovable(prompt: string, faceB64: string | undefined): 
 
   if (!response.ok) {
     const errText = await response.text();
-    if (response.status === 402)
-      throw new Error("Lovable Gateway: créditos insuficientes. Adicione créditos ou use Gemini direto.");
-    if (response.status === 429) throw new Error("Lovable Gateway: rate limit. Aguarde e tente novamente.");
+    console.error(`[generate-image] Lovable error ${response.status}:`, errText);
+    if (response.status === 402 || response.status === 429) {
+      // Sinaliza quota error com flag especial — frontend vai tentar Gemini
+      throw { isQuotaError: true, message: `Lovable Gateway ${response.status}: sem créditos/cota.` };
+    }
     throw new Error(`Lovable Gateway error ${response.status}: ${errText.slice(0, 200)}`);
   }
 
@@ -76,10 +78,13 @@ async function generateViaGemini(prompt: string, faceB64: string | undefined, ap
 
   if (!response.ok) {
     const errText = await response.text();
-    if (response.status === 400) throw new Error(`Gemini: requisição inválida — ${errText.slice(0, 200)}`);
-    if (response.status === 401 || response.status === 403)
+    console.error(`[generate-image] Gemini error ${response.status}:`, errText);
+    if (response.status === 429) {
+      throw { isQuotaError: true, message: `Gemini 429: rate limit.` };
+    }
+    if (response.status === 401 || response.status === 403) {
       throw new Error("Gemini: API Key inválida ou sem permissão.");
-    if (response.status === 429) throw new Error("Gemini: rate limit atingido. Aguarde e tente novamente.");
+    }
     throw new Error(`Gemini API error ${response.status}: ${errText.slice(0, 200)}`);
   }
 
@@ -110,10 +115,9 @@ serve(async (req) => {
     let imageUrl: string;
 
     if (provider === "gemini") {
-      if (!geminiApiKey) throw new Error("Gemini API Key não enviada. Configure em API_CONFIG no app.");
+      if (!geminiApiKey) throw new Error("Gemini API Key não enviada. Configure em API_KEYS no painel.");
       imageUrl = await generateViaGemini(prompt, faceB64, geminiApiKey);
     } else {
-      // padrão: lovable gateway
       imageUrl = await generateViaLovable(prompt, faceB64);
     }
 
@@ -121,11 +125,15 @@ serve(async (req) => {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Unknown error";
+  } catch (e: any) {
+    const msg = e?.message ?? "Unknown error";
+    const isQuotaError = e?.isQuotaError === true;
     console.error("[generate-image] Error:", msg);
-    return new Response(JSON.stringify({ error: msg }), {
-      status: 500,
+
+    // Retorna 200 com flag isQuotaError para o frontend poder fazer fallback
+    // sem ser bloqueado pelo erro de rede do Supabase client
+    return new Response(JSON.stringify({ error: msg, isQuotaError }), {
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
