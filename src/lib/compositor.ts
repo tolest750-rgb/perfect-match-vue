@@ -155,9 +155,15 @@ export async function analyzeLayout(
 
     const focusZone: FocusZone = (
       [
-        "top-left", "top-center", "top-right",
-        "center-left", "center", "center-right",
-        "bottom-left", "bottom-center", "bottom-right",
+        "top-left",
+        "top-center",
+        "top-right",
+        "center-left",
+        "center",
+        "center-right",
+        "bottom-left",
+        "bottom-center",
+        "bottom-right",
       ] as FocusZone[]
     ).includes(p.focusZone)
       ? p.focusZone
@@ -631,7 +637,17 @@ export async function composeSlide(
   const titleWords = (sl.titulo ?? "").split(/\s+/).length;
   // Títulos curtos e impactantes = maiores. Longos = menores mas legíveis.
   const TTL_SIZE = Math.round(
-    (titleLen <= 12 ? 110 : titleLen <= 20 ? 96 : titleLen <= 30 ? 80 : titleLen <= 45 ? 66 : titleLen <= 60 ? 54 : 46) * F
+    (titleLen <= 12
+      ? 110
+      : titleLen <= 20
+        ? 96
+        : titleLen <= 30
+          ? 80
+          : titleLen <= 45
+            ? 66
+            : titleLen <= 60
+              ? 54
+              : 46) * F,
   );
 
   // Subtítulo: proporcional mas com teto
@@ -643,14 +659,15 @@ export async function composeSlide(
   const ctaFont = `700 ${CTA_SIZE}px 'Bricolage Grotesque', sans-serif`;
 
   // Line height dinâmico: títulos curtos = mais apertado (impacto), longos = mais respiro
-  const tLH = TTL_SIZE * (titleWords <= 3 ? 1.05 : titleWords <= 5 ? 1.0 : 0.92);
-  const sLH = SUB_SIZE * 1.45;
+  // CRÍTICO: TTL_SIZE e SUB_SIZE já têm F embutido, então tLH/sLH ficam em px reais do canvas
+  const tLH = TTL_SIZE * (titleWords <= 3 ? 1.08 : titleWords <= 5 ? 1.02 : 0.94);
+  const sLH = SUB_SIZE * 1.5;
   // Tracking: títulos curtos ganham mais tracking para presença
   const titleTracking = titleLen <= 15 ? 6 * F : titleLen <= 30 ? 2 * F : 0;
 
   const GAP_TS = Math.round((titleWords <= 3 ? 34 : 24) * F);
-  const GAP_SC = 24 * F;
-  const CTA_H = 58 * F;
+  const GAP_SC = 28 * F;
+  const CTA_H = 62 * F;
 
   return new Promise<Blob>((resolve) => {
     const exportBlob = async () => {
@@ -733,25 +750,21 @@ export async function composeSlide(
       ctx.restore();
 
       // ── 4. CALCULAR BLOCO DE TEXTO ──────────────────────
-      // Diagramação por posição do slide:
-      // Slide 1 (capa) → center  |  Último → center
-      // Pares (2,4,6…) → left    |  Ímpares a partir do 3 → right
+      // Regra editorial do carrossel:
+      // Slide 1 (capa) → center | Último → center
+      // Pares (2,4,6…) → left   | Ímpares a partir do 3 → right
       const isLast = sl.n === sl.tot;
       const isFirst = sl.n === 1;
       const slideAlign: "left" | "center" | "right" = isFirst || isLast ? "center" : sl.n % 2 === 0 ? "left" : "right";
 
-      // Sobrescreve textZone da IA pela regra editorial do carrossel
       const forcedTextZone: TextZone =
         slideAlign === "center" ? "bottom-center" : slideAlign === "left" ? "bottom-left" : "bottom-right";
 
-      const textZone: TextZone = forcedTextZone;
-      const isLRZone = false; // zonas laterais desativadas nessa lógica
-      const mwRatio = 0.88;
-      const maxTextW = CW * mwRatio;
+      const maxTextW = CW * (slideAlign === "center" ? 0.86 : 0.78);
 
       const tLines = (() => {
         ctx.font = tFont;
-        return wrapTxt(ctx, sl.titulo, tFont, maxTextW, 2);
+        return wrapTxt(ctx, sl.titulo, tFont, maxTextW, 3);
       })();
       const sLines = sl.subtitulo
         ? (() => {
@@ -763,27 +776,33 @@ export async function composeSlide(
       // Mede CTA
       ctx.font = ctaFont;
       const ctaMetrics = sl.cta ? ctx.measureText(sl.cta) : null;
-      const ICON_W = 32 * F;
-      const ICON_GAP = 12 * F;
-      const CTA_PAD_L = 28 * F;
-      const CTA_PAD_R = 20 * F;
+      const ICON_W = 34 * F;
+      const ICON_GAP = 14 * F;
+      const CTA_PAD_L = 32 * F;
+      const CTA_PAD_R = 24 * F;
       const ctaPillW = ctaMetrics ? CTA_PAD_L + ctaMetrics.width + ICON_GAP + ICON_W + CTA_PAD_R : 0;
 
+      // Alturas reais de cada bloco
       const titleBlockH = tLines.length * tLH;
       const subBlockH = sLines.length > 0 ? GAP_TS + sLines.length * sLH : 0;
       const ctaBlockH = sl.cta ? GAP_SC + CTA_H : 0;
       const blockH = titleBlockH + subBlockH + ctaBlockH;
 
-      // Geometria com align forçado pelo número do slide
-      const geo = getTextGeometry(textZone, CW, CH, PAD_X, PAD_Y, blockH);
-      // Sobrescreve o align calculado pela zona com o align editorial
-      (geo as any).align = slideAlign === "left" ? "left" : slideAlign === "right" ? "right" : "center";
-      if (slideAlign === "left") (geo as any).anchorX = PAD_X;
-      if (slideAlign === "right") (geo as any).anchorX = CW - PAD_X;
-      if (slideAlign === "center") (geo as any).anchorX = CW / 2;
+      // Margem inferior segura: pelo menos PAD_Y * 1.6 do fundo
+      const BOTTOM_SAFE = PAD_Y * 1.6;
+      const TOP_SAFE = PAD_Y * 2.8; // abaixo do número de slide
+
+      // blockTopY: ancora o bloco no fundo, mas garante que não saia do topo
+      let blockTopY = CH - BOTTOM_SAFE - blockH;
+      if (blockTopY < TOP_SAFE) blockTopY = TOP_SAFE;
+
+      // anchorX por align
+      const anchorX = slideAlign === "left" ? PAD_X : slideAlign === "right" ? CW - PAD_X : CW / 2;
+      const textAlign: CanvasTextAlign = slideAlign === "left" ? "left" : slideAlign === "right" ? "right" : "center";
 
       // ── 5. RENDERIZA TÍTULO (omite se título está na imagem) ─
-      let curY = geo.blockTopY + tLH;
+      // curY aponta para a baseline da primeira linha do título
+      let curY = blockTopY + tLH;
 
       if (!titleInImage) {
         ctx.font = tFont;
@@ -791,8 +810,8 @@ export async function composeSlide(
           ctx,
           lines: tLines,
           startY: curY,
-          textX: geo.anchorX,
-          align: geo.align,
+          textX: anchorX,
+          align: textAlign,
           TTL_SIZE,
           F,
           accent,
@@ -802,23 +821,20 @@ export async function composeSlide(
           lineHeight: tLH,
         });
       }
-      // Avança curY pelo número de linhas do título
-      curY = geo.blockTopY + titleBlockH + sLH * 0.1;
 
       // ── 6. RENDERIZA SUBTÍTULO ──────────────────────────
       if (sLines.length > 0) {
-        curY += GAP_TS + tLH; // primeiro pula o gap + 1 line height de título
-        // Correto: curY começa depois do bloco de título
-        curY = geo.blockTopY + titleBlockH + GAP_TS + sLH;
+        // Subtítulo começa após o bloco do título + gap
+        curY = blockTopY + titleBlockH + GAP_TS + sLH;
         ctx.font = sFont;
         sLines.forEach((ln) => {
           ctx.save();
-          ctx.textAlign = geo.align;
-          ctx.shadowColor = "rgba(0,0,0,0.70)";
-          ctx.shadowBlur = 16 * F;
+          ctx.textAlign = textAlign;
+          ctx.shadowColor = "rgba(0,0,0,0.75)";
+          ctx.shadowBlur = 18 * F;
           ctx.shadowOffsetY = 3 * F;
-          ctx.fillStyle = "rgba(255,255,255,0.88)";
-          ctx.fillText(ln, geo.anchorX, curY);
+          ctx.fillStyle = "rgba(255,255,255,0.90)";
+          ctx.fillText(ln, anchorX, curY);
           ctx.restore();
           curY += sLH;
         });
@@ -826,14 +842,16 @@ export async function composeSlide(
 
       // ── 7. RENDERIZA CTA ────────────────────────────────
       if (sl.cta && ctaMetrics) {
-        // CTA começa logo depois do subtítulo (ou título se não há sub)
-        const ctaTopY = geo.blockTopY + titleBlockH + subBlockH + GAP_SC;
-        const ctaCY = ctaTopY + CTA_H / 2; // centro vertical da pílula
+        // CTA ancorando após subtítulo (ou título se não há sub)
+        const ctaTopY = blockTopY + titleBlockH + subBlockH + GAP_SC;
+        const ctaCY = ctaTopY + CTA_H / 2;
 
-        // X do CTA depende do align
-        let ctaX = geo.anchorX;
-        if (geo.align === "center") ctaX = geo.anchorX - ctaPillW / 2;
-        else if (geo.align === "right") ctaX = geo.anchorX - ctaPillW;
+        // X do CTA alinhado ao bloco de texto
+        let ctaX = anchorX;
+        if (textAlign === "center") ctaX = anchorX - ctaPillW / 2;
+        else if (textAlign === "right") ctaX = anchorX - ctaPillW;
+        // Garante que não saia do canvas
+        ctaX = Math.max(PAD_X, Math.min(CW - PAD_X - ctaPillW, ctaX));
 
         ctx.font = ctaFont;
 

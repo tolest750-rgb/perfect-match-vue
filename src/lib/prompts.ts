@@ -34,105 +34,35 @@ export const VAR_HINTS = [
 
 // ─── PERSON DETECTION ─────────────────────────────────────────
 const PERSON_KEYWORDS = [
-  // PT genérico
   "pessoa",
   "homem",
   "mulher",
   "menino",
   "menina",
   "criança",
-  "indivíduo",
-  "individuo",
-  "sujeito",
-  "figura",
-  "personagem",
-  "rapaz",
-  "moça",
-  "moca",
-  "jovem",
-  "adulto",
-  "adulta",
-  "garoto",
-  "garota",
-  "cara",
-  "tipo",
-  // PT profissional
   "executivo",
-  "executiva",
   "empresário",
   "empresária",
   "líder",
-  "lider",
   "atleta",
   "médico",
-  "medico",
   "profissional",
   "founder",
   "ceo",
   "palestrante",
   "especialista",
   "autor",
-  "autora",
   "coach",
-  "empreendedor",
-  "empreendedora",
-  "investidor",
-  "investidora",
-  "consultor",
-  "consultora",
-  "advogado",
-  "advogada",
-  "engenheiro",
-  "engenheira",
-  "diretor",
-  "diretora",
-  "gestor",
-  "gestora",
-  "vendedor",
-  "vendedora",
-  "influencer",
-  "influenciador",
-  "influenciadora",
-  "criador",
-  "criadora",
-  // PT pronomes / referências
   "ele",
   "ela",
-  "eu",
-  "meu",
-  "minha",
-  // EN genérico
   "person",
   "man",
   "woman",
   "boy",
   "girl",
   "human",
-  "individual",
-  "figure",
-  "character",
-  "guy",
-  "gal",
-  "young",
-  "adult",
-  // EN profissional
   "speaker",
   "expert",
-  "entrepreneur",
-  "investor",
-  "consultant",
-  "executive",
-  "ceo",
-  "founder",
-  "coach",
-  "author",
-  "leader",
-  "professional",
-  "athlete",
-  "doctor",
-  "engineer",
-  "influencer",
-  "creator",
 ];
 
 export function visualHasPerson(visual: string): boolean {
@@ -261,10 +191,8 @@ const KNOWN_NAMES = [
   "felipe neto",
 ];
 
-// Detecta nomes próprios: palavra única com inicial maiúscula E comprimento ≥ 4
-// OU múltiplas palavras capitalizadas (Nome Sobrenome)
 const PROPER_NAME_REGEX =
-  /\b[A-ZÁÉÍÓÚÂÊÔÃÕÇÑ][a-záéíóúâêôãõçñ]{3,}(?:\s+(?:de|do|da|dos|das|e|van|von|del|la|el|al|bin|ibn)?\s*[A-ZÁÉÍÓÚÂÊÔÃÕÇÑ][a-záéíóúâêôãõçñ]{2,})*\b/g;
+  /\b[A-ZÁÉÍÓÚÂÊÔÃÕÇÑ][a-záéíóúâêôãõçñ]{2,}(?:\s+(?:de|do|da|dos|das|e|van|von|del|la|el|al|bin|ibn)?\s*[A-ZÁÉÍÓÚÂÊÔÃÕÇÑ][a-záéíóúâêôãõçñ]{2,})+\b/g;
 
 const COMMON_NON_NAMES = [
   "call to action",
@@ -281,7 +209,6 @@ const COMMON_NON_NAMES = [
   "meio corpo",
   "corpo inteiro",
   "plano médio",
-  "plano medio",
   "à esquerda",
   "à direita",
   "ao centro",
@@ -290,39 +217,21 @@ const COMMON_NON_NAMES = [
   "full body",
   "half body",
   "face reference",
-  // Adjetivos/descritores que começam com maiúscula mas não são nomes
-  "cinematic",
-  "dramatic",
-  "editorial",
-  "corporate",
-  "futuristic",
-  "scene",
-  "background",
-  "foreground",
-  "portrait",
-  "style",
-  "luz",
-  "light",
-  "dark",
-  "shadow",
-  "fundo",
-  "cena",
-  "slide",
-  "foto",
-  "imagem",
-  "image",
-  "photo",
-  "visual",
 ];
 
 export function visualMentionsNamedPerson(visual: string): boolean {
   const v = (visual ?? "").toLowerCase();
 
-  // Check known names list first
-  if (KNOWN_NAMES.some((name) => v.includes(name))) return true;
+  // Remove trechos entre aspas antes de analisar — nomes entre aspas são
+  // apelidos/marcas do próprio usuário, não celebridades ou personagens externos
+  const vWithoutQuotes = v.replace(/"[^"]*"|'[^']*'|"[^"]*"|'[^']*'/g, "");
 
-  // Check proper name patterns (multi-word capitalized)
-  const matches = visual.match(PROPER_NAME_REGEX) || [];
+  // Check known names list first (na string sem aspas)
+  if (KNOWN_NAMES.some((name) => vWithoutQuotes.includes(name))) return true;
+
+  // Check proper name patterns no texto ORIGINAL sem aspas
+  const visualWithoutQuotes = (visual ?? "").replace(/"[^"]*"|'[^']*'|"[^"]*"|'[^']*'/g, "");
+  const matches = visualWithoutQuotes.match(PROPER_NAME_REGEX) || [];
   return matches.some((m) => !COMMON_NON_NAMES.some((cp) => m.toLowerCase().includes(cp)));
 }
 
