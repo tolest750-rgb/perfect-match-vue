@@ -3,7 +3,8 @@ import type { ProcessedSlide, StyleKey, LightKey, FormatKey, ResKey, LayoutPosit
 import { parseSlides } from "./parser";
 import { buildPrompt, buildLayout, visualHasPerson, visualMentionsNamedPerson, detectTitleStyle } from "./prompts";
 import type { TitleStyle } from "./prompts";
-import { analyzeLayout, composeSlide, visualHasTitleInImage } from "./compositor";
+import { analyzeLayout, composeSlide } from "./compositor";
+import { visualHasTitleInImage } from "./prompts";
 import type { AILayout } from "./compositor";
 import { callGemini } from "./gemini";
 
@@ -323,11 +324,8 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     const processedSlides: ProcessedSlide[] = parsed.map((s) => {
       // Face ref: only when there's a generic person AND no proper name detected
       const hasPerson = visualHasPerson(s.visual ?? "");
-      const namedPersonDetected = visualMentionsNamedPerson(s.visual ?? ""); // string | false
-      const useFaceRef = hasFaceRef && hasPerson && !namedPersonDetected;
-      // Guarda a palavra que causou omissão (ex: "elon musk", "João Silva")
-      const faceRefOmitReason: string | undefined =
-        !useFaceRef && !!namedPersonDetected ? namedPersonDetected : undefined;
+      const hasNamedPerson = visualMentionsNamedPerson(s.visual ?? "");
+      const useFaceRef = hasFaceRef && hasPerson && !hasNamedPerson;
 
       const layoutPos: LayoutPosition = "bottom-left";
       return {
@@ -343,7 +341,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
         },
         layoutPosition: layoutPos,
         useFaceRef,
-        faceRefOmitReason,
         fmt,
         style,
         light,
