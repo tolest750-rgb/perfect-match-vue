@@ -22,8 +22,66 @@ const LIGHTS: Record<LightKey, string> = {
     "single Rembrandt key light from above-right, deep chiaroscuro — shadows are rich dark-grey with faint warm candle-light contamination, dramatic contrast, visible tonal texture in all dark areas — noir palette with depth and color in the darkness, NEVER flat pure black",
 };
 
-const NEG =
+// ─── TITLE-IN-IMAGE DETECTION ────────────────────────────────
+// Detecta se o visual pede tipografia renderizada NA imagem (estilos de série).
+// Quando true: NEG não bloqueia texto e o positivo instrui a gerar a tipografia.
+const TITLE_IN_IMAGE_KEYWORDS = [
+  "título",
+  "titulo",
+  "title",
+  "tipografia",
+  "typography",
+  "lettering",
+  "fonte",
+  "font",
+  "escrito",
+  "texto na imagem",
+  "text in image",
+  "estilo de série",
+  "estilo de filme",
+  "estilo de título",
+  "title style",
+  "render",
+  "renderizar",
+  "burn",
+  "queimar",
+  "na cena o título",
+  "título na cena",
+  "todo mundo odeia",
+  "stranger things",
+  "breaking bad",
+  "peaky blinders",
+  "money heist",
+  "squid game",
+  "wednesday",
+  "succession",
+  "the office",
+  "ozark",
+  "narcos",
+  "euphoria",
+  "game of thrones",
+  "vikings",
+  "taxi driver",
+  "pulp fiction",
+  "blade runner",
+  "star wars",
+  "matrix",
+  "fight club",
+];
+
+export function visualHasTitleInImage(visual: string): boolean {
+  const v = (visual ?? "").toLowerCase();
+  return TITLE_IN_IMAGE_KEYWORDS.some((kw) => v.includes(kw));
+}
+
+// NEG padrão — proíbe texto na imagem (compositor sobrepõe o texto via canvas)
+const NEG_NO_TEXT =
   "text, typography, letters, words, watermark, logo, overlay text, speech bubbles, cartoon, anime, illustration, CGI, low quality, blurry, distorted face, different person, wrong identity, bad anatomy, deformed, pure black background, flat background, studio seamless backdrop, solid color background, zero-light shadow zones, washed out skin, plastic skin, airbrushed face";
+
+// NEG para slides com título NA imagem (estilos de série, lettering, etc.)
+// Remove as restrições de texto para que o modelo gere a tipografia pedida
+const NEG_WITH_TEXT =
+  "cartoon, anime, illustration, CGI, low quality, blurry, distorted face, different person, wrong identity, bad anatomy, deformed, pure black background, flat background, studio seamless backdrop, solid color background, zero-light shadow zones, washed out skin, plastic skin, airbrushed face";
 
 export const VAR_HINTS = [
   "",
@@ -318,6 +376,8 @@ export function buildPrompt(
   options?: { useFaceRef?: boolean },
 ) {
   const useFaceRef = options?.useFaceRef ?? false;
+  // Detecta se o slide quer tipografia na própria imagem (estilos de série)
+  const titleInImage = visualHasTitleInImage(sl.visual ?? "");
 
   const fmtHint: Record<FormatKey, string> = {
     "4:5": "vertical 4:5 portrait format (1080×1350px)",
@@ -350,7 +410,9 @@ export function buildPrompt(
     "COMPOSITION & LAYOUT:",
     "The image MUST have strong compositional hierarchy with dramatic negative space.",
     "Position the main subject off-center following the rule of thirds.",
-    "Leave at least 30-40% of the image as clean dark/atmospheric area for text overlay (do NOT add text — just leave clean space).",
+    titleInImage
+      ? "TYPOGRAPHY IS PART OF THE SCENE: render the title text directly embedded in the image with the requested style. The text must be fully legible, stylized, and integrated into the composition."
+      : "Leave at least 30-40% of the image as clean dark/atmospheric area for text overlay (do NOT add text — just leave clean space).",
     "Create natural depth separation: sharp foreground subject, soft bokeh mid-ground, atmospheric background.",
     "CRITICAL: Ensure at least one large area of the image has low visual complexity (soft gradients, bokeh, shadow) for typography placement.",
     "",
@@ -362,7 +424,7 @@ export function buildPrompt(
     .filter(Boolean)
     .join("\n");
 
-  return { pos: parts, neg: NEG };
+  return { pos: parts, neg: titleInImage ? NEG_WITH_TEXT : NEG_NO_TEXT };
 }
 
 // ─── BUILD LAYOUT (accent only) ──────────────────────────────
