@@ -135,80 +135,29 @@ export async function analyzeLayout(
   titleStyleHint: TitleStyle,
 ): Promise<AILayout> {
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 300,
-        system: `You are a world-class editorial art director. Analyze images to determine subject position and ideal text placement.
+    const { supabase } = await import("@/integrations/supabase/client");
 
-FOCUS ZONE: Identify where the MAIN SUBJECT (person, object, focal point) is located. Use a 3x3 grid:
-- top-left | top-center | top-right
-- center-left | center | center-right
-- bottom-left | bottom-center | bottom-right
-
-TEXT PLACEMENT RULES (strict):
-- If subject is "center" → text at bottom-center (centered alignment)
-- If subject is top zone → text at bottom zone (same horizontal)
-- If subject is bottom zone → text at top zone (same horizontal)
-- If subject is left → text at right-center
-- If subject is right → text at left-center
-
-GRADIENT: Must cover the text zone sufficiently.
-gradientMaxOpacity: minimum needed (prefer 0.65–0.82).
-gradientStart: where the gradient begins (0=edge, 1=center, use 0.30–0.65).
-
-Respond ONLY with valid JSON, no markdown.`,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: { type: "base64", media_type: "image/jpeg", data: imageBase64 },
-              },
-              {
-                type: "text",
-                text: `Analyze this ${fmt} image.
-Title to overlay: "${titulo}"
-Subtitle: "${subtitulo}"
-Has CTA button: ${hasCta}
-
-Return ONLY this JSON:
-{
-  "focusZone": "<top-left|top-center|top-right|center-left|center|center-right|bottom-left|bottom-center|bottom-right>",
-  "gradientStart": <0.30–0.65>,
-  "gradientMaxOpacity": <0.55–0.88>
-}`,
-              },
-            ],
-          },
-        ],
-      }),
+    const { data, error } = await supabase.functions.invoke("analyze-layout", {
+      body: {
+        imageBase64,
+        titulo,
+        subtitulo,
+        hasCta,
+        fmt,
+      },
     });
 
-    if (!response.ok) return { ...DEFAULT_LAYOUT, titleStyle: titleStyleHint };
+    if (error || !data) return { ...DEFAULT_LAYOUT, titleStyle: titleStyleHint };
 
-    const data = await response.json();
-    const raw = (data.content ?? []).map((c: any) => c.text || "").join("");
-    const clean = raw.replace(/```json|```/g, "").trim();
-    const p = JSON.parse(clean);
-
+    const p = data;
     const clamp = (v: number, min: number, max: number) =>
       isFinite(v) ? Math.min(max, Math.max(min, v)) : (min + max) / 2;
 
     const focusZone: FocusZone = (
       [
-        "top-left",
-        "top-center",
-        "top-right",
-        "center-left",
-        "center",
-        "center-right",
-        "bottom-left",
-        "bottom-center",
-        "bottom-right",
+        "top-left", "top-center", "top-right",
+        "center-left", "center", "center-right",
+        "bottom-left", "bottom-center", "bottom-right",
       ] as FocusZone[]
     ).includes(p.focusZone)
       ? p.focusZone
