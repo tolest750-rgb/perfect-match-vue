@@ -3,20 +3,6 @@ import { VAR_HINTS } from "./prompts";
 import { supabase } from "@/integrations/supabase/client";
 import { loadApiConfig, getOrderedGeminiKeys, markKeyFailed } from "@/components/Sidebar";
 
-const QUOTA_ERRORS = [
-  "créditos insuficientes",
-  "not enough credits",
-  "payment required",
-  "quota exceeded",
-  "rate limit",
-  "429",
-  "402",
-];
-function isQuotaError(msg: string): boolean {
-  const lower = msg.toLowerCase();
-  return QUOTA_ERRORS.some((e) => lower.includes(e));
-}
-
 export async function callGemini(sl: ProcessedSlide, varIdx: number, faceB64: string): Promise<string | null> {
   if (varIdx > 0) {
     await new Promise((r) => setTimeout(r, varIdx * 3000));
@@ -34,21 +20,28 @@ export async function callGemini(sl: ProcessedSlide, varIdx: number, faceB64: st
   const sendFace = sl.useFaceRef && faceB64 ? faceB64 : undefined;
 
   // ── 1. Lovable Gateway (prioritário) ────────────────────────
-  try {
-    const { data, error } = await supabase.functions.invoke("generate-image", {
-      body: { prompt: promptText, faceB64: sendFace, provider: "lovable" },
-    });
-    if (!error && !data?.error && data?.imageUrl) return data.imageUrl;
-    const errMsg = error?.message ?? data?.error ?? "";
-    if (!isQuotaError(errMsg)) throw new Error(errMsg || "Lovable Gateway: erro desconhecido");
-    console.warn("[callGemini] Lovable sem créditos, tentando Gemini keys...");
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (!isQuotaError(msg)) throw e;
-    console.warn("[callGemini] Lovable falhou por cota:", msg);
+  const lovableResult = await supabase.functions.invoke("generate-image", {
+    body: { prompt: promptText, faceB64: sendFace, provider: "lovable" },
+  });
+
+  // Erro de rede/deploy — para aqui, não é problema de cota
+  if (lovableResult.error) {
+    throw new Error(lovableResult.error.message || "Edge Function error");
   }
 
-  // ── 2. Gemini keys em cascata ────────────────────────────────
+  const lovableData = lovableResult.data;
+
+  // Sucesso no Lovable
+  if (lovableData?.imageUrl) return lovableData.imageUrl;
+
+  // Se não é erro de cota, para aqui com o erro real
+  if (!lovableData?.isQuotaError) {
+    throw new Error(lovableData?.error || "Lovable Gateway: erro desconhecido");
+  }
+
+  // É erro de cota — tenta Gemini keys em cascata
+  console.warn("[callGemini] Lovable sem créditos, tentando Gemini keys...");
+
   let cfg = loadApiConfig();
   const keys = getOrderedGeminiKeys(cfg);
 
@@ -60,27 +53,28 @@ export async function callGemini(sl: ProcessedSlide, varIdx: number, faceB64: st
   }
 
   for (const keyEntry of keys) {
-    try {
-      console.log(`[callGemini] Tentando Gemini key: ${keyEntry.name}`);
-      const { data, error } = await supabase.functions.invoke("generate-image", {
-        body: { prompt: promptText, faceB64: sendFace, provider: "gemini", geminiApiKey: keyEntry.key },
-      });
-      if (!error && !data?.error && data?.imageUrl) return data.imageUrl;
-      const errMsg = error?.message ?? data?.error ?? "";
-      if (isQuotaError(errMsg)) {
-        console.warn(`[callGemini] Key "${keyEntry.name}" sem cota, tentando próxima...`);
-        cfg = markKeyFailed(cfg, keyEntry.id);
-        continue;
-      }
-      throw new Error(errMsg || `Gemini key "${keyEntry.name}": erro desconhecido`);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (isQuotaError(msg)) {
-        cfg = markKeyFailed(cfg, keyEntry.id);
-        continue;
-      }
-      throw e;
+    console.log(`[callGemini] Tentando Gemini key: ${keyEntry.name}`);
+
+    const result = await supabase.functions.invoke("generate-image", {
+      body: { prompt: promptText, faceB64: sendFace, provider: "gemini", geminiApiKey: keyEntry.key },
+    });
+
+    if (result.error) throw new Error(result.error.message || "Edge Function error");
+
+    const data = result.data;
+
+    // Sucesso
+    if (data?.imageUrl) return data.imageUrl;
+
+    // Erro de cota — marca key e tenta próxima
+    if (data?.isQuotaError) {
+      console.warn(`[callGemini] Key "${keyEntry.name}" sem cota, tentando próxima...`);
+      cfg = markKeyFailed(cfg, keyEntry.id);
+      continue;
     }
+
+    // Erro definitivo (key inválida, etc)
+    throw new Error(data?.error || `Gemini key "${keyEntry.name}": erro desconhecido`);
   }
 
   throw new Error(
