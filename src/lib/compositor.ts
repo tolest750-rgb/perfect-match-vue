@@ -1,59 +1,10 @@
 import type { ProcessedSlide, LightKey } from "./parser";
+import { visualHasTitleInImage } from "./prompts";
 import type { TitleStyle } from "./prompts";
 
 // ─────────────────────────────────────────────────────────────
 // AI LAYOUT — interface + analyzeLayout embutido
 // ─────────────────────────────────────────────────────────────
-
-// ─── DETECÇÃO: TÍTULO JÁ ESTÁ NA IMAGEM ──────────────────────
-const TITLE_IN_IMAGE_KEYWORDS = [
-  "título",
-  "titulo",
-  "title",
-  "tipografia",
-  "typography",
-  "lettering",
-  "fonte",
-  "font",
-  "escrito",
-  "texto na imagem",
-  "text in image",
-  "estilo de série",
-  "estilo de filme",
-  "todo mundo odeia",
-  "stranger things",
-  "breaking bad",
-  "peaky blinders",
-  "money heist",
-  "squid game",
-  "wednesday",
-  "succession",
-  "the office",
-  "ozark",
-  "narcos",
-  "euphoria",
-  "game of thrones",
-  "vikings",
-  "taxi driver",
-  "pulp fiction",
-  "blade runner",
-  "star wars",
-  "matrix",
-  "fight club",
-  "estilo de título",
-  "title style",
-  "render",
-  "renderizar",
-  "burn",
-  "queimar",
-  "na cena o título",
-  "título na cena",
-];
-
-export function visualHasTitleInImage(visual: string): boolean {
-  const v = (visual ?? "").toLowerCase();
-  return TITLE_IN_IMAGE_KEYWORDS.some((kw) => v.includes(kw));
-}
 
 // focusZone = onde está o sujeito principal da imagem
 // textZone  = onde o texto deve ir (oposto/complementar ao foco)
@@ -212,14 +163,12 @@ function wrapTxt(ctx: CanvasRenderingContext2D, txt: string, font: string, maxW:
     const t = cur ? cur + " " + w : w;
     if (ctx.measureText(t).width > maxW && cur) {
       lines.push(cur);
-      if (lines.length >= maxL) {
-        lines[lines.length - 1] += "…";
-        return lines;
-      }
+      // Nunca trunca com "…" — continua quebrando em mais linhas
       cur = w;
     } else cur = t;
   }
   if (cur) lines.push(cur);
+  // Se mesmo assim ultrapassou maxL, retorna tudo (melhor vazar que cortar)
   return lines;
 }
 
@@ -489,6 +438,63 @@ interface TextGeometry {
   isTop: boolean;
 }
 
+// ─────────────────────────────────────────────────────────────
+// ANÁLISE DE IMAGEM: detecta melhor região para o texto
+// Divide a imagem em 6 zonas e mede brightness + complexity (std-dev)
+// Retorna a zona com mais "espaço limpo" (baixa complexidade, boa legibilidade)
+// ─────────────────────────────────────────────────────────────
+interface RegionScore {
+  zone: "top" | "bottom";
+  brightness: number; // 0–255 média de luminância
+  complexity: number; // desvio padrão dos pixels (baixo = zona limpa)
+  contrast: number; // contraste estimado (quanto o gradiente precisa forçar)
+}
+
+function analyzeImageRegions(
+  ctx: CanvasRenderingContext2D,
+  CW: number,
+  CH: number,
+): { bestZone: "top" | "bottom"; topScore: RegionScore; bottomScore: RegionScore } {
+  // Amostra em resolução reduzida para performance (a cada 4 pixels)
+  const STEP = 4;
+  const ZONE_H = Math.round(CH * 0.32); // 32% superior e inferior
+
+  const sampleRegion = (yStart: number, yEnd: number): RegionScore => {
+    const data = ctx.getImageData(0, yStart, CW, yEnd - yStart).data;
+    const lums: number[] = [];
+    for (let i = 0; i < data.length; i += 4 * STEP) {
+      const r = data[i],
+        g = data[i + 1],
+        b = data[i + 2];
+      // Luminância perceptual (Rec.709)
+      lums.push(0.2126 * r + 0.7152 * g + 0.0722 * b);
+    }
+    const n = lums.length;
+    const mean = lums.reduce((a, b) => a + b, 0) / n;
+    const variance = lums.reduce((a, v) => a + (v - mean) ** 2, 0) / n;
+    const stdDev = Math.sqrt(variance);
+    // Contraste estimado: quanto mais distante do meio (128), mais precisa de gradiente
+    const contrastNeed = Math.abs(mean - 180) / 180; // texto branco → precisa de fundo escuro
+    return {
+      zone: yStart < CH / 2 ? "top" : "bottom",
+      brightness: mean,
+      complexity: stdDev,
+      contrast: contrastNeed,
+    };
+  };
+
+  const topScore = sampleRegion(0, ZONE_H);
+  const bottomScore = sampleRegion(CH - ZONE_H, CH);
+
+  // Score de "adequação para texto" (menor é melhor):
+  // - alta complexidade = muitos detalhes = ruim para texto
+  // - alta brightness = fundo claro = ruim para texto branco
+  const scoreOf = (r: RegionScore) => r.complexity * 0.6 + r.brightness * 0.4;
+  const bestZone = scoreOf(topScore) <= scoreOf(bottomScore) ? "top" : "bottom";
+
+  return { bestZone, topScore, bottomScore };
+}
+
 function getTextGeometry(
   textZone: TextZone,
   CW: number,
@@ -659,15 +665,14 @@ export async function composeSlide(
   const ctaFont = `700 ${CTA_SIZE}px 'Bricolage Grotesque', sans-serif`;
 
   // Line height dinâmico: títulos curtos = mais apertado (impacto), longos = mais respiro
-  // CRÍTICO: TTL_SIZE e SUB_SIZE já têm F embutido, então tLH/sLH ficam em px reais do canvas
-  const tLH = TTL_SIZE * (titleWords <= 3 ? 1.08 : titleWords <= 5 ? 1.02 : 0.94);
-  const sLH = SUB_SIZE * 1.5;
+  const tLH = TTL_SIZE * (titleWords <= 3 ? 1.05 : titleWords <= 5 ? 1.0 : 0.92);
+  const sLH = SUB_SIZE * 1.45;
   // Tracking: títulos curtos ganham mais tracking para presença
   const titleTracking = titleLen <= 15 ? 6 * F : titleLen <= 30 ? 2 * F : 0;
 
   const GAP_TS = Math.round((titleWords <= 3 ? 34 : 24) * F);
-  const GAP_SC = 28 * F;
-  const CTA_H = 62 * F;
+  const GAP_SC = 24 * F;
+  const CTA_H = 58 * F;
 
   return new Promise<Blob>((resolve) => {
     const exportBlob = async () => {
@@ -678,59 +683,46 @@ export async function composeSlide(
 
     const doText = () => {
       // ── 1. GRADIENTE DE LEGIBILIDADE ────────────────────
-      const mo = L.gradientMaxOpacity;
+      // Analisa a imagem ANTES de qualquer overlay para decisões informadas
+      const imgAnalysis = analyzeImageRegions(ctx, CW, CH);
+      const regionForGrad = imgAnalysis.bestZone === "top" ? imgAnalysis.topScore : imgAnalysis.bottomScore;
+
+      // Opacidade dinâmica: quanto mais claro/complexo o fundo, mais escuro o gradiente
+      // brightness alta (>160) ou complexity alta (>55) → mais gradiente
+      const dynamicOpacity = Math.min(
+        0.96,
+        Math.max(0.55, (regionForGrad.brightness / 255) * 0.55 + (regionForGrad.complexity / 80) * 0.45),
+      );
+      const mo = dynamicOpacity;
       const gs = L.gradientStart;
       let ov: CanvasGradient;
 
-      switch (L.gradientType) {
-        case "top":
-          ov = ctx.createLinearGradient(0, 0, 0, CH * (1 - gs));
-          ov.addColorStop(0, `rgba(0,0,0,${mo})`);
-          ov.addColorStop(0.45, `rgba(0,0,0,${mo * 0.55})`);
-          ov.addColorStop(1, "rgba(0,0,0,0)");
-          break;
-        case "left":
-          ov = ctx.createLinearGradient(0, 0, CW * (1 - gs), 0);
-          ov.addColorStop(0, `rgba(0,0,0,${mo})`);
-          ov.addColorStop(0.45, `rgba(0,0,0,${mo * 0.5})`);
-          ov.addColorStop(1, "rgba(0,0,0,0)");
-          break;
-        case "right":
-          ov = ctx.createLinearGradient(CW, 0, CW * gs, 0);
-          ov.addColorStop(0, `rgba(0,0,0,${mo})`);
-          ov.addColorStop(0.45, `rgba(0,0,0,${mo * 0.5})`);
-          ov.addColorStop(1, "rgba(0,0,0,0)");
-          break;
-        case "radial-top":
-          ov = ctx.createRadialGradient(CW / 2, CH * 0.2, CH * 0.05, CW / 2, CH * 0.2, CH * 0.75);
-          ov.addColorStop(0, `rgba(0,0,0,${mo * 0.9})`);
-          ov.addColorStop(0.6, `rgba(0,0,0,${mo * 0.4})`);
-          ov.addColorStop(1, "rgba(0,0,0,0)");
-          break;
-        default: // bottom + radial-bottom
-          ov = ctx.createLinearGradient(0, CH * gs, 0, CH);
-          ov.addColorStop(0, "rgba(0,0,0,0)");
-          ov.addColorStop(0.28, `rgba(0,0,0,${mo * 0.38})`);
-          ov.addColorStop(0.6, `rgba(0,0,0,${mo * 0.78})`);
-          ov.addColorStop(1, `rgba(0,0,0,${mo})`);
+      // Direção do gradiente segue a zona de texto detectada
+      const isTopZone = imgAnalysis.bestZone === "top";
+
+      if (isTopZone) {
+        // Gradiente de cima para baixo (cobre o topo)
+        ov = ctx.createLinearGradient(0, 0, 0, CH * 0.52);
+        ov.addColorStop(0, `rgba(0,0,0,${mo})`);
+        ov.addColorStop(0.5, `rgba(0,0,0,${mo * 0.55})`);
+        ov.addColorStop(1, "rgba(0,0,0,0)");
+      } else {
+        // Gradiente de baixo para cima (cobre a base)
+        ov = ctx.createLinearGradient(0, CH * gs, 0, CH);
+        ov.addColorStop(0, "rgba(0,0,0,0)");
+        ov.addColorStop(0.28, `rgba(0,0,0,${mo * 0.38})`);
+        ov.addColorStop(0.6, `rgba(0,0,0,${mo * 0.78})`);
+        ov.addColorStop(1, `rgba(0,0,0,${mo})`);
       }
       ctx.fillStyle = ov;
       ctx.fillRect(0, 0, CW, CH);
 
       // ── 2. COR AMBIENTE ─────────────────────────────────
       let ambOv: CanvasGradient;
-      switch (L.gradientType) {
-        case "top":
-          ambOv = ctx.createLinearGradient(0, 0, 0, CH * 0.45);
-          break;
-        case "left":
-          ambOv = ctx.createLinearGradient(0, 0, CW * 0.45, 0);
-          break;
-        case "right":
-          ambOv = ctx.createLinearGradient(CW, 0, CW * 0.55, 0);
-          break;
-        default:
-          ambOv = ctx.createLinearGradient(0, CH * (gs + 0.08), 0, CH);
+      if (isTopZone) {
+        ambOv = ctx.createLinearGradient(0, 0, 0, CH * 0.45);
+      } else {
+        ambOv = ctx.createLinearGradient(0, CH * (gs + 0.08), 0, CH);
       }
       ambOv.addColorStop(0, `rgba(${accentRgb},0)`);
       ambOv.addColorStop(0.6, `rgba(${accentRgb},0.05)`);
@@ -750,17 +742,31 @@ export async function composeSlide(
       ctx.restore();
 
       // ── 4. CALCULAR BLOCO DE TEXTO ──────────────────────
-      // Regra editorial do carrossel:
-      // Slide 1 (capa) → center | Último → center
-      // Pares (2,4,6…) → left   | Ímpares a partir do 3 → right
+      // Alinhamento editorial: capa/encerramento → center | pares → left | ímpares → right
       const isLast = sl.n === sl.tot;
       const isFirst = sl.n === 1;
       const slideAlign: "left" | "center" | "right" = isFirst || isLast ? "center" : sl.n % 2 === 0 ? "left" : "right";
 
-      const forcedTextZone: TextZone =
-        slideAlign === "center" ? "bottom-center" : slideAlign === "left" ? "bottom-left" : "bottom-right";
+      // ── Análise da imagem: detecta se topo ou base tem mais espaço limpo
+      const imgAnalysis = analyzeImageRegions(ctx, CW, CH);
+      const bestV = imgAnalysis.bestZone; // "top" | "bottom"
 
-      const maxTextW = CW * (slideAlign === "center" ? 0.86 : 0.78);
+      // Compõe textZone combinando análise vertical + regra editorial de alinhamento horizontal
+      const textZone: TextZone =
+        bestV === "top"
+          ? slideAlign === "center"
+            ? "top-center"
+            : slideAlign === "left"
+              ? "top-left"
+              : "top-right"
+          : slideAlign === "center"
+            ? "bottom-center"
+            : slideAlign === "left"
+              ? "bottom-left"
+              : "bottom-right";
+
+      const mwRatio = 0.88;
+      const maxTextW = CW * mwRatio;
 
       const tLines = (() => {
         ctx.font = tFont;
@@ -769,40 +775,30 @@ export async function composeSlide(
       const sLines = sl.subtitulo
         ? (() => {
             ctx.font = sFont;
-            return wrapTxt(ctx, sl.subtitulo, sFont, maxTextW, 3);
+            return wrapTxt(ctx, sl.subtitulo, sFont, maxTextW, 8);
           })()
         : [];
 
       // Mede CTA
       ctx.font = ctaFont;
       const ctaMetrics = sl.cta ? ctx.measureText(sl.cta) : null;
-      const ICON_W = 34 * F;
-      const ICON_GAP = 14 * F;
-      const CTA_PAD_L = 32 * F;
-      const CTA_PAD_R = 24 * F;
+      const ICON_W = 32 * F;
+      const ICON_GAP = 12 * F;
+      const CTA_PAD_L = 28 * F;
+      const CTA_PAD_R = 20 * F;
       const ctaPillW = ctaMetrics ? CTA_PAD_L + ctaMetrics.width + ICON_GAP + ICON_W + CTA_PAD_R : 0;
 
-      // Alturas reais de cada bloco
       const titleBlockH = tLines.length * tLH;
       const subBlockH = sLines.length > 0 ? GAP_TS + sLines.length * sLH : 0;
       const ctaBlockH = sl.cta ? GAP_SC + CTA_H : 0;
       const blockH = titleBlockH + subBlockH + ctaBlockH;
 
-      // Margem inferior segura: pelo menos PAD_Y * 1.6 do fundo
-      const BOTTOM_SAFE = PAD_Y * 1.6;
-      const TOP_SAFE = PAD_Y * 2.8; // abaixo do número de slide
-
-      // blockTopY: ancora o bloco no fundo, mas garante que não saia do topo
-      let blockTopY = CH - BOTTOM_SAFE - blockH;
-      if (blockTopY < TOP_SAFE) blockTopY = TOP_SAFE;
-
-      // anchorX por align
-      const anchorX = slideAlign === "left" ? PAD_X : slideAlign === "right" ? CW - PAD_X : CW / 2;
-      const textAlign: CanvasTextAlign = slideAlign === "left" ? "left" : slideAlign === "right" ? "right" : "center";
+      // Geometria com align forçado pelo número do slide
+      const geo = getTextGeometry(textZone, CW, CH, PAD_X, PAD_Y, blockH);
+      // geo já contém align e anchorX corretos via textZone construída acima
 
       // ── 5. RENDERIZA TÍTULO (omite se título está na imagem) ─
-      // curY aponta para a baseline da primeira linha do título
-      let curY = blockTopY + tLH;
+      let curY = geo.blockTopY + tLH;
 
       if (!titleInImage) {
         ctx.font = tFont;
@@ -810,8 +806,8 @@ export async function composeSlide(
           ctx,
           lines: tLines,
           startY: curY,
-          textX: anchorX,
-          align: textAlign,
+          textX: geo.anchorX,
+          align: geo.align,
           TTL_SIZE,
           F,
           accent,
@@ -821,37 +817,167 @@ export async function composeSlide(
           lineHeight: tLH,
         });
       }
+      // Avança curY pelo número de linhas do título
+      curY = geo.blockTopY + titleBlockH + sLH * 0.1;
 
       // ── 6. RENDERIZA SUBTÍTULO ──────────────────────────
       if (sLines.length > 0) {
-        // Subtítulo começa após o bloco do título + gap
-        curY = blockTopY + titleBlockH + GAP_TS + sLH;
-        ctx.font = sFont;
+        curY = geo.blockTopY + titleBlockH + GAP_TS + sLH;
+
+        // Detecta palavras-chave para destaque: as mais longas e substantivas
+        // Heurística: pega as 2-3 palavras com mais de 5 chars,
+        // excluindo stopwords funcionais
+        const SUB_STOPWORDS = new Set([
+          "para",
+          "porque",
+          "quando",
+          "onde",
+          "como",
+          "mais",
+          "menos",
+          "muito",
+          "pouco",
+          "uma",
+          "uns",
+          "umas",
+          "que",
+          "isso",
+          "esse",
+          "essa",
+          "este",
+          "esta",
+          "aquele",
+          "aquela",
+          "pelo",
+          "pela",
+          "pelos",
+          "pelas",
+          "com",
+          "sem",
+          "por",
+          "mas",
+          "nem",
+          "seu",
+          "sua",
+          "seus",
+          "suas",
+          "não",
+          "sim",
+          "sobre",
+          "também",
+          "ainda",
+          "apenas",
+          "tudo",
+          "nada",
+          "sempre",
+          "nunca",
+          "cada",
+          "todo",
+          "toda",
+          "todos",
+          "todas",
+          "está",
+          "são",
+          "foi",
+          "ser",
+          "ter",
+          "haver",
+          "fazer",
+          "poder",
+          "the",
+          "and",
+          "for",
+          "that",
+          "this",
+          "with",
+          "from",
+          "they",
+          "them",
+        ]);
+        const subFullText = sl.subtitulo ?? "";
+        const subWords = subFullText.split(/\s+/);
+        // Candidatos: palavras longas que não são stopwords
+        const candidates = subWords
+          .filter((w) => w.replace(/[^a-záàãâéêíóôõúüçñA-Z]/g, "").length > 5)
+          .filter((w) => !SUB_STOPWORDS.has(w.toLowerCase().replace(/[^a-záàãâéêíóôõúüçñ]/gi, "")))
+          .sort((a, b) => b.length - a.length);
+        // Pega até 3 palavras-chave únicas (sem repetir a mesma raiz)
+        const keywords: Set<string> = new Set();
+        for (const w of candidates) {
+          const clean = w.toLowerCase().replace(/[^a-záàãâéêíóôõúüçñ]/gi, "");
+          if (![...keywords].some((k) => clean.startsWith(k.slice(0, 5)) || k.startsWith(clean.slice(0, 5)))) {
+            keywords.add(clean);
+          }
+          if (keywords.size >= 3) break;
+        }
+
+        const SUB_BOLD_SIZE = Math.round(SUB_SIZE * 1.08);
+        const sBoldFont = `700 ${SUB_BOLD_SIZE}px 'Bricolage Grotesque', sans-serif`;
+
+        // Renderiza cada linha word-by-word para permitir peso variável
         sLines.forEach((ln) => {
-          ctx.save();
-          ctx.textAlign = textAlign;
-          ctx.shadowColor = "rgba(0,0,0,0.75)";
-          ctx.shadowBlur = 18 * F;
-          ctx.shadowOffsetY = 3 * F;
-          ctx.fillStyle = "rgba(255,255,255,0.90)";
-          ctx.fillText(ln, anchorX, curY);
-          ctx.restore();
+          const lineWords = ln.split(" ");
+          // Calcula largura total da linha para ancoragem
+          let totalW = 0;
+          lineWords.forEach((w, wi) => {
+            const clean = w.toLowerCase().replace(/[^a-záàãâéêíóôõúüçñ]/gi, "");
+            const isKw = [...keywords].some((k) => clean.startsWith(k.slice(0, 5)) || k.startsWith(clean.slice(0, 5)));
+            ctx.font = isKw ? sBoldFont : sFont;
+            totalW += ctx.measureText(w).width;
+            if (wi < lineWords.length - 1) {
+              ctx.font = sFont;
+              totalW += ctx.measureText(" ").width;
+            }
+          });
+
+          // Ponto inicial conforme align
+          let wx = geo.anchorX;
+          if (geo.align === "center") wx = geo.anchorX - totalW / 2;
+          else if (geo.align === "right") wx = geo.anchorX - totalW;
+
+          lineWords.forEach((w, wi) => {
+            const clean = w.toLowerCase().replace(/[^a-záàãâéêíóôõúüçñ]/gi, "");
+            const isKw = [...keywords].some((k) => clean.startsWith(k.slice(0, 5)) || k.startsWith(clean.slice(0, 5)));
+            ctx.save();
+            ctx.textAlign = "left";
+            ctx.shadowColor = "rgba(0,0,0,0.70)";
+            ctx.shadowBlur = 16 * F;
+            ctx.shadowOffsetY = 3 * F;
+            if (isKw) {
+              ctx.font = sBoldFont;
+              ctx.fillStyle = accent; // destaque na cor accent do slide
+              // sombra colorida leve atrás da palavra-chave
+              ctx.shadowColor = `rgba(${accentRgb},0.4)`;
+              ctx.shadowBlur = 14 * F;
+            } else {
+              ctx.font = sFont;
+              ctx.fillStyle = "rgba(255,255,255,0.88)";
+            }
+            ctx.fillText(w, wx, curY);
+            const wW = ctx.measureText(w).width;
+            ctx.restore();
+
+            wx += wW;
+            if (wi < lineWords.length - 1) {
+              ctx.font = sFont;
+              wx += ctx.measureText(" ").width;
+            }
+          });
+
           curY += sLH;
         });
       }
 
       // ── 7. RENDERIZA CTA ────────────────────────────────
       if (sl.cta && ctaMetrics) {
-        // CTA ancorando após subtítulo (ou título se não há sub)
-        const ctaTopY = blockTopY + titleBlockH + subBlockH + GAP_SC;
-        const ctaCY = ctaTopY + CTA_H / 2;
+        // CTA começa logo depois do subtítulo (ou título se não há sub)
+        const ctaTopY = geo.blockTopY + titleBlockH + subBlockH + GAP_SC;
+        const ctaCY = ctaTopY + CTA_H / 2; // centro vertical da pílula
 
-        // X do CTA alinhado ao bloco de texto
-        let ctaX = anchorX;
-        if (textAlign === "center") ctaX = anchorX - ctaPillW / 2;
-        else if (textAlign === "right") ctaX = anchorX - ctaPillW;
-        // Garante que não saia do canvas
-        ctaX = Math.max(PAD_X, Math.min(CW - PAD_X - ctaPillW, ctaX));
+        // X do CTA depende do align
+        let ctaX = geo.anchorX;
+        if (geo.align === "center") ctaX = geo.anchorX - ctaPillW / 2;
+        else if (geo.align === "right") ctaX = geo.anchorX - ctaPillW;
 
         ctx.font = ctaFont;
 
