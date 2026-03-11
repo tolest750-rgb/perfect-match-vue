@@ -25,48 +25,37 @@ const LIGHTS: Record<LightKey, string> = {
 // ─── TITLE-IN-IMAGE DETECTION ────────────────────────────────
 // Detecta se o visual pede tipografia renderizada NA imagem (estilos de série).
 // Quando true: NEG não bloqueia texto e o positivo instrui a gerar a tipografia.
+// Apenas frases que inequivocamente pedem que o título seja
+// RENDERIZADO como elemento visual DENTRO da imagem gerada.
+// Palavras ambíguas ("título", "tipografia", "escrito", "logo") foram
+// removidas — podem descrever elementos da cena sem ser pedido de título.
 const TITLE_IN_IMAGE_KEYWORDS = [
+  // Pedido explícito de posição na cena
+  "título na cena",
+  "titulo na cena",
+  "na cena o título",
+  "na cena o titulo",
+  "título na imagem",
+  "titulo na imagem",
+  "title in the image",
+  "title in scene",
+  // Pedido explícito de renderização/queima
+  "renderizar o título",
+  "renderizar o titulo",
+  "burn the title",
+  "queimar o título",
+  "queimar o titulo",
+  "burn title",
+  "render title",
+  // "título" sozinho — válido pois a função recebe sl.visual diretamente
   "título",
   "titulo",
-  "title",
-  "tipografia",
-  "typography",
-  "lettering",
-  "fonte",
-  "font",
-  "escrito",
-  "texto na imagem",
-  "text in image",
-  "estilo de série",
-  "estilo de filme",
+  // Estilo de série/filme com tipografia própria (o título É parte da estética)
   "estilo de título",
+  "estilo de titulo",
   "title style",
-  "render",
-  "renderizar",
-  "burn",
-  "queimar",
-  "na cena o título",
-  "título na cena",
-  "todo mundo odeia",
-  "stranger things",
-  "breaking bad",
-  "peaky blinders",
-  "money heist",
-  "squid game",
-  "wednesday",
-  "succession",
-  "the office",
-  "ozark",
-  "narcos",
-  "euphoria",
-  "game of thrones",
-  "vikings",
-  "taxi driver",
-  "pulp fiction",
-  "blade runner",
-  "star wars",
-  "matrix",
-  "fight club",
+  "lettering estilo",
+  "tipografia estilo",
 ];
 
 export function visualHasTitleInImage(visual: string): boolean {
