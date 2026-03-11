@@ -74,172 +74,171 @@ export function visualHasPerson(visual: string): boolean {
 // Detects proper names, celebrities, characters in the VISUAL field.
 // When detected, FACE_REFERENCE should be omitted so the AI generates
 // the actual person/character instead of using the user's face.
-const KNOWN_NAMES = [
-  // Tech
-  "elon musk",
-  "steve jobs",
-  "bill gates",
-  "mark zuckerberg",
-  "jeff bezos",
-  "tim cook",
-  "satya nadella",
-  "larry page",
-  "sergey brin",
-  "jack dorsey",
-  // Entertainment
-  "beyoncé",
-  "beyonce",
-  "rihanna",
-  "drake",
-  "taylor swift",
-  "kanye west",
-  "lady gaga",
-  "madonna",
-  "michael jackson",
-  "elvis presley",
-  "freddie mercury",
-  "bob marley",
-  "eminem",
-  "jay-z",
-  "nicki minaj",
-  "ariana grande",
-  // Actors
-  "brad pitt",
-  "angelina jolie",
-  "leonardo dicaprio",
-  "robert downey jr",
-  "tom cruise",
-  "will smith",
-  "johnny depp",
-  "scarlett johansson",
-  "morgan freeman",
-  "denzel washington",
-  "keanu reeves",
-  "ryan reynolds",
-  "dwayne johnson",
-  "the rock",
-  // Sports
-  "cristiano ronaldo",
-  "messi",
-  "lionel messi",
-  "neymar",
-  "lebron james",
-  "michael jordan",
-  "serena williams",
-  "usain bolt",
-  "pelé",
-  "pele",
-  "ronaldinho",
-  "kobe bryant",
-  "muhammad ali",
-  // Historical
-  "einstein",
-  "albert einstein",
-  "nikola tesla",
-  "napoleon",
-  "cleopatra",
-  "gandhi",
-  "martin luther king",
-  "nelson mandela",
-  "abraham lincoln",
-  // Fictional characters
-  "batman",
-  "superman",
-  "spider-man",
-  "spiderman",
-  "homem-aranha",
-  "iron man",
-  "homem de ferro",
-  "thor",
-  "hulk",
-  "wolverine",
-  "darth vader",
-  "luke skywalker",
-  "harry potter",
-  "gandalf",
-  "joker",
-  "coringa",
-  "thanos",
-  "deadpool",
-  "capitão américa",
-  "captain america",
-  "wonder woman",
-  "mulher maravilha",
-  // Brazilian
-  "anitta",
-  "neymar jr",
-  "xuxa",
-  "silvio santos",
-  "luciano huck",
-  "gisele bündchen",
-  "gisele bundchen",
-  "ayrton senna",
-  "lula",
-  "bolsonaro",
-  "pablo marçal",
-  "pablo marcal",
-  "flávio augusto",
-  "flavio augusto",
-  "thiago nigro",
-  "primo rico",
-  "joel jota",
-  "caio carneiro",
-  "ícaro de carvalho",
-  "icaro de carvalho",
-  "whindersson nunes",
-  "casimiro",
-  "felipe neto",
-];
+// ─── NAMED PERSON DETECTION ──────────────────────────────────
+// Detecta nomes próprios de pessoas pelo critério mais confiável:
+// palavra com inicial maiúscula, fora de aspas, não sendo palavra
+// comum do contexto de roteiro/câmera/locais.
 
-const PROPER_NAME_REGEX =
-  /\b[A-ZÁÉÍÓÚÂÊÔÃÕÇÑ][a-záéíóúâêôãõçñ]{2,}(?:\s+(?:de|do|da|dos|das|e|van|von|del|la|el|al|bin|ibn)?\s*[A-ZÁÉÍÓÚÂÊÔÃÕÇÑ][a-záéíóúâêôãõçñ]{2,})+\b/g;
+// Palavras que começam com maiúscula mas NÃO são nomes de pessoas
+const NON_PERSON_WORDS = new Set([
+  // Estruturais do roteiro
+  "cena",
+  "slide",
+  "visual",
+  "estilo",
+  "câmera",
+  "camera",
+  "lente",
+  "plano",
+  "composição",
+  "composicao",
+  "iluminação",
+  "iluminacao",
+  "profundidade",
+  "campo",
+  "primeiro",
+  "segundo",
+  "terceiro",
+  "fundo",
+  "frente",
+  "esquerda",
+  "direita",
+  "centro",
+  "topo",
+  "base",
+  "lateral",
+  "diagonal",
+  "abertura",
+  "encerramento",
+  "episódio",
+  "episodio",
+  // Qualificadores visuais
+  "close",
+  "ultra",
+  "hiper",
+  "super",
+  "realismo",
+  "realista",
+  "cinematográfico",
+  "cinematografico",
+  "editorial",
+  "dramático",
+  "dramatico",
+  "suave",
+  "forte",
+  "intenso",
+  "leve",
+  "amplo",
+  "aberto",
+  "fechado",
+  // Locais (cidades/lugares não são pessoas)
+  "brooklyn",
+  "manhattan",
+  "paris",
+  "london",
+  "tokyo",
+  "roma",
+  "berlin",
+  "brasília",
+  "brasilia",
+  "rua",
+  "avenida",
+  "praça",
+  "praca",
+  "bairro",
+  "cidade",
+  "país",
+  "pais",
+  "sala",
+  "cozinha",
+  "quarto",
+  "escritório",
+  "escritorio",
+  "escola",
+  "igreja",
+  "estudio",
+  "estúdio",
+  "corleone",
+  // Termos técnicos de câmera/fotografia
+  "bokeh",
+  "grading",
+  "color",
+  "grain",
+  "analógico",
+  "analogico",
+  "formato",
+  "qualidade",
+  "textura",
+  "atmosfera",
+  "ambiente",
+  "clima",
+  // Contexto de seriado/mídia
+  "seriado",
+  "série",
+  "serie",
+  "família",
+  "familia",
+  "casa",
+  "episodio",
+  "capa",
+  "todo",
+  "todos",
+  "toda",
+  "todas",
+  "mundo",
+  "odeia",
+  "cris",
+  "rock",
+  "motion",
+  "freeze",
+  "ring",
+  "light",
+  // Termos de prompt
+  "call",
+  "action",
+  "face",
+  "reference",
+  "full",
+  "body",
+  "half",
+  "negative",
+  "positive",
+]);
 
-const COMMON_NON_NAMES = [
-  "call to action",
-  "no slide",
-  "na cena",
-  "do slide",
-  "em pé",
-  "de frente",
-  "ao fundo",
-  "na mesa",
-  "com fundo",
-  "olhando para",
-  "close up",
-  "meio corpo",
-  "corpo inteiro",
-  "plano médio",
-  "à esquerda",
-  "à direita",
-  "ao centro",
-  "no centro",
-  "first person",
-  "full body",
-  "half body",
-  "face reference",
-];
+// Remove aspas retas, simples e tipográficas
+const QUOTE_RE = /"[^"]*"|'[^']*'|\u201c[^\u201d]*\u201d|\u2018[^\u2019]*\u2019/g;
+
+// Remove contexto de série: ", do seriado Título do Seriado" e variações
+// Impede que o nome da série trigge como nome de pessoa
+const SERIES_CONTEXT_RE = /,?\s+do seriado\s+[^.,;\n]+/gi;
+
+// Palavra com inicial maiúscula (PT/EN com acentos), mínimo 3 chars
+// Captura "Nome", "Nome de Sobrenome", "Nome da Silva" etc.
+const CAPITALIZED_WORD_RE =
+  /\b[A-ZÁÉÍÓÚÂÊÔÃÕÇÑ][A-ZÁÉÍÓÚÂÊÔÃÕÇÑa-záéíóúâêôãõçñ]{2,}(?:\s+(?:de|do|da|dos|das|e|von|van|del|di|el|al)\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇÑ][a-záéíóúâêôãõçñ]{2,})?\b/g;
 
 /**
- * Retorna o nome/palavra detectada que causou a omissão do FACE_REF,
- * ou `false` se nenhum nome próprio externo foi encontrado.
- * Nomes entre aspas são ignorados (são apelidos/marcas do próprio usuário).
+ * Retorna o nome próprio detectado (string) ou `false`.
+ *
+ * Regras:
+ * - Palavra com inicial MAIÚSCULA fora de aspas = nome próprio de pessoa
+ * - Conteúdo entre aspas ("Julius") = apelido/marca do usuário → ignora
+ * - Contexto ", do seriado X" é removido para não triger o nome da série
+ * - Palavras técnicas/locais conhecidas → ignora
  */
 export function visualMentionsNamedPerson(visual: string): string | false {
-  // Remove trechos entre aspas — nomes entre aspas não bloqueiam FACE_REF
-  const QUOTE_RE = /"[^"]*"|'[^']*'|\u201c[^\u201d]*\u201d|\u2018[^\u2019]*\u2019/g;
-  const v = (visual ?? "").toLowerCase().replace(QUOTE_RE, "");
-  const visualClean = (visual ?? "").replace(QUOTE_RE, "");
+  // 1. Remove aspas e contexto de seriado
+  const visualClean = (visual ?? "").replace(QUOTE_RE, "").replace(SERIES_CONTEXT_RE, "");
 
-  // 1. Verifica lista de nomes conhecidos
-  const knownMatch = KNOWN_NAMES.find((name) => v.includes(name));
-  if (knownMatch) return knownMatch;
+  // 2. Encontra palavras com inicial maiúscula
+  const matches = visualClean.match(CAPITALIZED_WORD_RE) || [];
 
-  // 2. Verifica padrão regex de nomes próprios
-  const matches = visualClean.match(PROPER_NAME_REGEX) || [];
-  const nameMatch = matches.find((m) => !COMMON_NON_NAMES.some((cp) => m.toLowerCase().includes(cp)));
-  if (nameMatch) return nameMatch;
+  // 3. Filtra palavras sabidamente não-pessoas
+  const nameMatch = matches.find(
+    (m) => !NON_PERSON_WORDS.has(m.toLowerCase()) && !NON_PERSON_WORDS.has(m.split(" ")[0].toLowerCase()),
+  );
 
-  return false;
+  return nameMatch || false;
 }
 
 // ─── SKIN & REALISM BOOSTER ───────────────────────────────────
