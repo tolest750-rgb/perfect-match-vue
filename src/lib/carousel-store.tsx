@@ -3,7 +3,8 @@ import type { ProcessedSlide, StyleKey, LightKey, FormatKey, ResKey, LayoutPosit
 import { parseSlides } from "./parser";
 import { buildPrompt, buildLayout, visualHasPerson, visualMentionsNamedPerson, detectTitleStyle } from "./prompts";
 import type { TitleStyle } from "./prompts";
-import { analyzeLayout, composeSlide, visualHasTitleInImage } from "./compositor";
+import { analyzeLayout, composeSlide } from "./compositor";
+import { visualHasTitleInImage } from "./prompts";
 import type { AILayout } from "./compositor";
 import { callGemini } from "./gemini";
 
