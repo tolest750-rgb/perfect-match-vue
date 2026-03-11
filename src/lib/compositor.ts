@@ -135,80 +135,29 @@ export async function analyzeLayout(
   titleStyleHint: TitleStyle,
 ): Promise<AILayout> {
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 300,
-        system: `You are a world-class editorial art director. Analyze images to determine subject position and ideal text placement.
+    const { supabase } = await import("@/integrations/supabase/client");
 
-FOCUS ZONE: Identify where the MAIN SUBJECT (person, object, focal point) is located. Use a 3x3 grid:
-- top-left | top-center | top-right
-- center-left | center | center-right
-- bottom-left | bottom-center | bottom-right
-
-TEXT PLACEMENT RULES (strict):
-- If subject is "center" → text at bottom-center (centered alignment)
-- If subject is top zone → text at bottom zone (same horizontal)
-- If subject is bottom zone → text at top zone (same horizontal)
-- If subject is left → text at right-center
-- If subject is right → text at left-center
-
-GRADIENT: Must cover the text zone sufficiently.
-gradientMaxOpacity: minimum needed (prefer 0.65–0.82).
-gradientStart: where the gradient begins (0=edge, 1=center, use 0.30–0.65).
-
-Respond ONLY with valid JSON, no markdown.`,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: { type: "base64", media_type: "image/jpeg", data: imageBase64 },
-              },
-              {
-                type: "text",
-                text: `Analyze this ${fmt} image.
-Title to overlay: "${titulo}"
-Subtitle: "${subtitulo}"
-Has CTA button: ${hasCta}
-
-Return ONLY this JSON:
-{
-  "focusZone": "<top-left|top-center|top-right|center-left|center|center-right|bottom-left|bottom-center|bottom-right>",
-  "gradientStart": <0.30–0.65>,
-  "gradientMaxOpacity": <0.55–0.88>
-}`,
-              },
-            ],
-          },
-        ],
-      }),
+    const { data, error } = await supabase.functions.invoke("analyze-layout", {
+      body: {
+        imageBase64,
+        titulo,
+        subtitulo,
+        hasCta,
+        fmt,
+      },
     });
 
-    if (!response.ok) return { ...DEFAULT_LAYOUT, titleStyle: titleStyleHint };
+    if (error || !data) return { ...DEFAULT_LAYOUT, titleStyle: titleStyleHint };
 
-    const data = await response.json();
-    const raw = (data.content ?? []).map((c: any) => c.text || "").join("");
-    const clean = raw.replace(/```json|```/g, "").trim();
-    const p = JSON.parse(clean);
-
+    const p = data;
     const clamp = (v: number, min: number, max: number) =>
       isFinite(v) ? Math.min(max, Math.max(min, v)) : (min + max) / 2;
 
     const focusZone: FocusZone = (
       [
-        "top-left",
-        "top-center",
-        "top-right",
-        "center-left",
-        "center",
-        "center-right",
-        "bottom-left",
-        "bottom-center",
-        "bottom-right",
+        "top-left", "top-center", "top-right",
+        "center-left", "center", "center-right",
+        "bottom-left", "bottom-center", "bottom-right",
       ] as FocusZone[]
     ).includes(p.focusZone)
       ? p.focusZone
@@ -234,9 +183,23 @@ Return ONLY this JSON:
 // CANVAS HELPERS
 // ─────────────────────────────────────────────────────────────
 
+// Smart word wrap with intelligent line breaking
+// Prioritizes breaking at natural phrase boundaries
 function wrapTxt(ctx: CanvasRenderingContext2D, txt: string, font: string, maxW: number, maxL: number): string[] {
   ctx.font = font;
   const words = txt.split(" ");
+  if (words.length <= 1) return [txt];
+
+  // For 2-line layouts, try to break at midpoint for visual balance
+  if (maxL === 2 && words.length >= 3) {
+    const mid = Math.ceil(words.length / 2);
+    const line1 = words.slice(0, mid).join(" ");
+    const line2 = words.slice(mid).join(" ");
+    if (ctx.measureText(line1).width <= maxW && ctx.measureText(line2).width <= maxW) {
+      return [line1, line2];
+    }
+  }
+
   const lines: string[] = [];
   let cur = "";
   for (const w of words) {
@@ -659,24 +622,34 @@ export async function composeSlide(
   const accent: string = (sl.layout as any)?.accent ?? ACC[sl.light as LightKey] ?? "#c8ff00";
   const accentRgb = hexToRgb(accent) ?? "200,255,0";
 
-  // ── Tipografia ──────────────────────────────────────────────
+  // ── Tipografia Inteligente ─────────────────────────────────
   const NUM_SIZE = Math.round(14 * F);
-  const SUB_SIZE = Math.round(34 * F);
   const CTA_SIZE = Math.round(20 * F);
 
-  // Tamanho dinâmico do título baseado no número de caracteres
+  // Tamanho dinâmico do título baseado no número de caracteres + número de palavras
   const titleLen = (sl.titulo ?? "").length;
-  const TTL_SIZE = Math.round((titleLen <= 20 ? 96 : titleLen <= 35 ? 78 : titleLen <= 50 ? 62 : 50) * F);
+  const titleWords = (sl.titulo ?? "").split(/\s+/).length;
+  // Títulos curtos e impactantes = maiores. Longos = menores mas legíveis.
+  const TTL_SIZE = Math.round(
+    (titleLen <= 12 ? 110 : titleLen <= 20 ? 96 : titleLen <= 30 ? 80 : titleLen <= 45 ? 66 : titleLen <= 60 ? 54 : 46) * F
+  );
+
+  // Subtítulo: proporcional mas com teto
+  const SUB_SIZE = Math.round(Math.min(38, Math.max(26, TTL_SIZE * 0.38)) * F);
 
   const numFont = `700 ${NUM_SIZE}px 'Bricolage Grotesque', sans-serif`;
-  const tFont = `800 ${TTL_SIZE}px 'Bricolage Grotesque', sans-serif`;
-  const sFont = `400 ${SUB_SIZE}px 'Bricolage Grotesque', sans-serif`;
+  const tFont = `900 ${TTL_SIZE}px 'Bricolage Grotesque', sans-serif`;
+  const sFont = `300 ${SUB_SIZE}px 'Bricolage Grotesque', sans-serif`;
   const ctaFont = `700 ${CTA_SIZE}px 'Bricolage Grotesque', sans-serif`;
 
-  const tLH = TTL_SIZE * F * 0.96; // line height título
-  const sLH = SUB_SIZE * F * 1.5; // line height subtítulo
-  const GAP_TS = 28 * F; // gap título → subtítulo
-  const GAP_SC = 24 * F; // gap subtítulo → CTA
+  // Line height dinâmico: títulos curtos = mais apertado (impacto), longos = mais respiro
+  const tLH = TTL_SIZE * (titleWords <= 3 ? 1.05 : titleWords <= 5 ? 1.0 : 0.92);
+  const sLH = SUB_SIZE * 1.45;
+  // Tracking: títulos curtos ganham mais tracking para presença
+  const titleTracking = titleLen <= 15 ? 6 * F : titleLen <= 30 ? 2 * F : 0;
+
+  const GAP_TS = Math.round((titleWords <= 3 ? 34 : 24) * F);
+  const GAP_SC = 24 * F;
   const CTA_H = 58 * F;
 
   return new Promise<Blob>((resolve) => {

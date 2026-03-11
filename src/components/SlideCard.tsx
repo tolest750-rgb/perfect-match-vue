@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useCarousel } from "@/lib/carousel-store";
+import { supabase } from "@/integrations/supabase/client";
 import type { ProcessedSlide } from "@/lib/parser";
 
 interface SlideCardProps {
@@ -16,33 +17,24 @@ async function upscaleBlob(blob: Blob): Promise<Blob> {
       r.onerror = rej;
       r.readAsDataURL(blob);
     });
-    const startRes = await fetch("https://api.replicate.com/v1/predictions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Token ${import.meta.env.VITE_REPLICATE_API_TOKEN}`,
-      },
-      body: JSON.stringify({
-        version: "42fed1c4974146d4d2414e2be2c5277c7fcf05fcc3a73abf41610695738c1d7b",
-        input: { image: `data:image/png;base64,${b64}`, scale: 4, face_enhance: true },
-      }),
+
+    const { data, error } = await supabase.functions.invoke("upscale-image", {
+      body: { imageB64: b64, scale: 4 },
     });
-    if (!startRes.ok) return blob;
-    const pred = await startRes.json();
-    for (let i = 0; i < 30; i++) {
-      await new Promise((r) => setTimeout(r, 2000));
-      const poll = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, {
-        headers: { Authorization: `Token ${import.meta.env.VITE_REPLICATE_API_TOKEN}` },
-      });
-      const data = await poll.json();
-      if (data.status === "succeeded") {
-        const imgRes = await fetch(data.output);
-        return imgRes.ok ? await imgRes.blob() : blob;
-      }
-      if (data.status === "failed") return blob;
+
+    if (error) {
+      console.error("[upscale] Edge function error:", error);
+      return blob;
     }
+
+    if (data?.imageUrl) {
+      const imgRes = await fetch(data.imageUrl);
+      if (imgRes.ok) return await imgRes.blob();
+    }
+
     return blob;
-  } catch {
+  } catch (e) {
+    console.error("[upscale] Error:", e);
     return blob;
   }
 }
@@ -127,7 +119,7 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
       >
         <div className="flex items-center gap-2 flex-1 min-w-0 relative z-10">
           <span
-            className="bg-transparent border border-primary text-primary font-mono text-[8px] tracking-[2px] py-0.5 px-2 rounded-sm whitespace-nowrap"
+            className="bg-transparent border border-primary text-primary font-mono text-[8px] tracking-[2px] py-0.5 px-2 rounded-sm whitespace-nowrap shrink-0"
             style={{
               textShadow: "0 0 6px hsl(var(--primary))",
               boxShadow: "0 0 6px hsl(var(--neon-dim)/0.07), inset 0 0 6px hsl(var(--neon-dim)/0.07)",
@@ -136,7 +128,7 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
             SL_{String(slide.n).padStart(2, "0")}
           </span>
           <span
-            className={`font-mono text-[7px] tracking-[1.5px] py-0.5 px-[7px] rounded-sm whitespace-nowrap uppercase border ${statusClass}`}
+            className={`font-mono text-[7px] tracking-[1.5px] py-0.5 px-[7px] rounded-sm whitespace-nowrap uppercase border shrink-0 ${statusClass}`}
           >
             {statusLabel}
           </span>
@@ -159,19 +151,19 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
             <span
               className={`font-mono text-[8px] tracking-[1px] py-0.5 px-2 rounded-sm border whitespace-nowrap transition-all duration-300 ${stepClass(1)}`}
             >
-              ① GEMINI_IMAGE_GEN×4
+              ① IMG_GEN×4
             </span>
             <span className="text-border2 text-[10px]">›</span>
             <span
               className={`font-mono text-[8px] tracking-[1px] py-0.5 px-2 rounded-sm border whitespace-nowrap transition-all duration-300 ${stepClass(2)}`}
             >
-              ② CANVAS_COMPOSITOR
+              ② COMPOSITOR
             </span>
             <span className="text-border2 text-[10px]">›</span>
             <span
               className={`font-mono text-[8px] tracking-[1px] py-0.5 px-2 rounded-sm border whitespace-nowrap transition-all duration-300 ${stepClass(3)}`}
             >
-              ③ SLIDES_FINAIS
+              ③ FINAL
             </span>
           </div>
 
@@ -179,12 +171,11 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
           <div className="p-3.5">
             <div
               className="font-mono text-[9px] tracking-[2px] uppercase text-muted-foreground mb-2.5 flex items-center gap-2 before:content-['◈'] before:text-primary after:content-[''] after:flex-1 after:h-px after:bg-gradient-to-r after:from-border2 after:to-transparent"
-              style={{ ["--tw-before-text-shadow" as string]: "0 0 6px hsl(var(--primary))" }}
             >
-              VARIAÇÕES_GERADAS // {slide.num}
+              VARIAÇÕES // {slide.num}
             </div>
 
-            <div className="grid grid-cols-4 gap-2 max-[1200px]:grid-cols-2">
+            <div className="grid grid-cols-4 gap-2 max-[1200px]:grid-cols-2 max-[600px]:grid-cols-1">
               {[0, 1, 2, 3].map((v) => {
                 const key = `${index}_${v}`;
                 const varStatus = varStatuses[key] || "idle";
@@ -210,7 +201,7 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
                       ) : varStatus === "error" ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
                           <span className="text-lg text-destructive">✕</span>
-                          <span className="text-[7px] text-destructive tracking-[1px] font-mono">GEN_FAILED</span>
+                          <span className="text-[7px] text-destructive tracking-[1px] font-mono">FALHOU</span>
                         </div>
                       ) : url ? (
                         <>
@@ -221,7 +212,7 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
                             className="absolute inset-0 w-full h-full object-cover cursor-zoom-in transition-opacity duration-500 opacity-100 hover:brightness-105"
                           />
                           <span className="absolute top-1 right-1 bg-primary text-primary-foreground font-mono text-[7px] font-bold py-0.5 px-1 rounded-sm tracking-[1px] uppercase">
-                            COMPOSTO
+                            OK
                           </span>
                         </>
                       ) : (
@@ -240,7 +231,7 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
                           disabled={enhancing[`${index}_${v}`]}
                           className="flex-1 bg-card border border-border rounded-sm text-muted-foreground font-mono text-[8px] tracking-[0.5px] py-1 cursor-pointer transition-all duration-200 text-center hover:bg-primary/[0.06] hover:border-primary hover:text-primary hover:shadow-[0_0_6px_hsl(var(--neon-dim)/0.07)] disabled:opacity-40"
                         >
-                          {enhancing[`${index}_${v}`] ? "↑ 4K..." : "▼ 4K"}
+                          {enhancing[`${index}_${v}`] ? "↑ UPSCALING..." : "▼ 4K"}
                         </button>
                         <button
                           onClick={() => regenVar(index, v)}
@@ -261,7 +252,7 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
                 disabled={enhancing[`${index}_zip`]}
                 className="w-full mt-2 bg-transparent border border-primary/40 rounded-sm text-primary font-mono text-[9px] tracking-[1.5px] uppercase py-1.5 cursor-pointer transition-all duration-200 hover:bg-primary/[0.06] hover:border-primary hover:shadow-[0_0_12px_hsl(var(--primary)/0.15)] disabled:opacity-40"
               >
-                {enhancing[`${index}_zip`] ? "↑ APLICANDO 4K UPSCALE..." : "▼ BAIXAR TODAS · ZIP · 4K"}
+                {enhancing[`${index}_zip`] ? "↑ UPSCALING + ZIP..." : "▼ TODAS · ZIP · 4K ENHANCE"}
               </button>
             )}
           </div>
@@ -269,45 +260,45 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
           {/* Prompts section */}
           <div className="px-3.5 pb-3.5 flex flex-col gap-2">
             {/* Face ref */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-1.5 font-mono text-[8px] tracking-[1.5px] uppercase text-muted-foreground">
-                  ◈ FACE_REFERENCE{" "}
-                  <span className="font-mono text-[7px] tracking-[1px] py-0.5 px-1.5 rounded-sm uppercase bg-primary/[0.05] text-neon2 border border-primary/[0.15]">
-                    INLINE_DATA
-                  </span>
+            {slide.useFaceRef && faceDataUrl && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5 font-mono text-[8px] tracking-[1.5px] uppercase text-muted-foreground">
+                    ◈ FACE_REF{" "}
+                    <span className="font-mono text-[7px] tracking-[1px] py-0.5 px-1.5 rounded-sm uppercase bg-primary/[0.05] text-neon2 border border-primary/[0.15]">
+                      ATIVO
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div className="bg-background border border-border2 rounded-sm p-2 flex items-center gap-2.5 transition-colors duration-200 hover:border-primary/20">
-                {faceDataUrl && (
+                <div className="bg-background border border-border2 rounded-sm p-2 flex items-center gap-2.5 transition-colors duration-200 hover:border-primary/20">
                   <img
                     src={faceDataUrl}
                     alt="face"
                     className="w-[30px] h-[30px] rounded-full object-cover border border-primary shadow-[0_0_8px_hsl(var(--neon-dim)/0.07)]"
                   />
-                )}
-                <div className="font-mono text-[8px] text-muted-foreground leading-relaxed tracking-[0.3px]">
-                  Enviado em{" "}
-                  <code className="bg-card-2 border border-border2 px-1 py-0.5 rounded-sm text-[9px] text-neon2">
-                    parts[0].inline_data
-                  </code>{" "}
-                  como JPEG base64
-                  <br />
-                  <span className="text-neon2">→ 4 chamadas paralelas · gemini-3-pro-image-preview</span>
+                  <div className="font-mono text-[8px] text-muted-foreground leading-relaxed tracking-[0.3px]">
+                    Identidade facial enviada como referência
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {!slide.useFaceRef && visualHasNamedPerson(slide.visual) && (
+              <div className="bg-background border border-border2 rounded-sm p-2 font-mono text-[8px] text-muted-foreground">
+                ◈ FACE_REF <span className="text-warning">OMITIDO</span> — nome próprio detectado no VISUAL
+              </div>
+            )}
 
             {/* Positive */}
             <PromptBlock
-              label="POSITIVE_PROMPT"
-              tag="GEMINI_IMAGE"
+              label="POSITIVE"
+              tag="GEMINI"
               tagClass="bg-primary/[0.07] text-primary border-primary/20"
               text={slide.prompt.pos}
             />
             {/* Negative */}
             <PromptBlock
-              label="NEGATIVE_PROMPT"
+              label="NEGATIVE"
               tag="EXCLUSÃO"
               tagClass="bg-destructive/[0.07] text-destructive border-destructive/20"
               text={slide.prompt.neg}
@@ -318,6 +309,15 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
       )}
     </div>
   );
+}
+
+// Helper to check named person in visual (imported logic)
+function visualHasNamedPerson(visual: string): boolean {
+  const v = (visual ?? "").toLowerCase();
+  const knownNames = ["elon musk", "steve jobs", "bill gates", "mark zuckerberg"];
+  if (knownNames.some((n) => v.includes(n))) return true;
+  const pattern = /\b[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,}(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,})+\b/g;
+  return (visual.match(pattern) || []).length > 0;
 }
 
 function PromptBlock({
