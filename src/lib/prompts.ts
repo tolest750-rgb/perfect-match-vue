@@ -219,20 +219,27 @@ const COMMON_NON_NAMES = [
   "face reference",
 ];
 
-export function visualMentionsNamedPerson(visual: string): boolean {
-  const v = (visual ?? "").toLowerCase();
+/**
+ * Retorna o nome/palavra detectada que causou a omissão do FACE_REF,
+ * ou `false` se nenhum nome próprio externo foi encontrado.
+ * Nomes entre aspas são ignorados (são apelidos/marcas do próprio usuário).
+ */
+export function visualMentionsNamedPerson(visual: string): string | false {
+  // Remove trechos entre aspas — nomes entre aspas não bloqueiam FACE_REF
+  const QUOTE_RE = /"[^"]*"|'[^']*'|\u201c[^\u201d]*\u201d|\u2018[^\u2019]*\u2019/g;
+  const v = (visual ?? "").toLowerCase().replace(QUOTE_RE, "");
+  const visualClean = (visual ?? "").replace(QUOTE_RE, "");
 
-  // Remove trechos entre aspas antes de analisar — nomes entre aspas são
-  // apelidos/marcas do próprio usuário, não celebridades ou personagens externos
-  const vWithoutQuotes = v.replace(/"[^"]*"|'[^']*'|"[^"]*"|'[^']*'/g, "");
+  // 1. Verifica lista de nomes conhecidos
+  const knownMatch = KNOWN_NAMES.find((name) => v.includes(name));
+  if (knownMatch) return knownMatch;
 
-  // Check known names list first (na string sem aspas)
-  if (KNOWN_NAMES.some((name) => vWithoutQuotes.includes(name))) return true;
+  // 2. Verifica padrão regex de nomes próprios
+  const matches = visualClean.match(PROPER_NAME_REGEX) || [];
+  const nameMatch = matches.find((m) => !COMMON_NON_NAMES.some((cp) => m.toLowerCase().includes(cp)));
+  if (nameMatch) return nameMatch;
 
-  // Check proper name patterns no texto ORIGINAL sem aspas
-  const visualWithoutQuotes = (visual ?? "").replace(/"[^"]*"|'[^']*'|"[^"]*"|'[^']*'/g, "");
-  const matches = visualWithoutQuotes.match(PROPER_NAME_REGEX) || [];
-  return matches.some((m) => !COMMON_NON_NAMES.some((cp) => m.toLowerCase().includes(cp)));
+  return false;
 }
 
 // ─── SKIN & REALISM BOOSTER ───────────────────────────────────

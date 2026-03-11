@@ -169,9 +169,7 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
 
           {/* Variations Grid */}
           <div className="p-3.5">
-            <div
-              className="font-mono text-[9px] tracking-[2px] uppercase text-muted-foreground mb-2.5 flex items-center gap-2 before:content-['◈'] before:text-primary after:content-[''] after:flex-1 after:h-px after:bg-gradient-to-r after:from-border2 after:to-transparent"
-            >
+            <div className="font-mono text-[9px] tracking-[2px] uppercase text-muted-foreground mb-2.5 flex items-center gap-2 before:content-['◈'] before:text-primary after:content-[''] after:flex-1 after:h-px after:bg-gradient-to-r after:from-border2 after:to-transparent">
               VARIAÇÕES // {slide.num}
             </div>
 
@@ -283,9 +281,21 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
               </div>
             )}
 
-            {!slide.useFaceRef && visualHasNamedPerson(slide.visual) && (
-              <div className="bg-background border border-border2 rounded-sm p-2 font-mono text-[8px] text-muted-foreground">
-                ◈ FACE_REF <span className="text-warning">OMITIDO</span> — nome próprio detectado no VISUAL
+            {!slide.useFaceRef && (slide as any).faceRefOmitReason && (
+              <div className="bg-background border border-warning/20 rounded-sm p-2 flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-[8px] tracking-[1.5px] text-muted-foreground whitespace-nowrap">
+                  ◈ FACE_REF
+                </span>
+                <span className="font-mono text-[7px] tracking-[1px] py-0.5 px-1.5 rounded-sm uppercase bg-warning/[0.08] text-warning border border-warning/20 whitespace-nowrap">
+                  OMITIDO
+                </span>
+                <span className="font-mono text-[8px] text-muted-foreground whitespace-nowrap">—</span>
+                <span
+                  className="font-mono text-[8px] tracking-[0.5px] py-0.5 px-2 rounded-sm bg-destructive/[0.07] text-destructive border border-destructive/20 truncate max-w-[180px]"
+                  title={(slide as any).faceRefOmitReason}
+                >
+                  &quot;{(slide as any).faceRefOmitReason}&quot;
+                </span>
               </div>
             )}
 
@@ -309,15 +319,6 @@ export function SlideCard({ slide, index, onImageClick }: SlideCardProps) {
       )}
     </div>
   );
-}
-
-// Helper to check named person in visual (imported logic)
-function visualHasNamedPerson(visual: string): boolean {
-  const v = (visual ?? "").toLowerCase();
-  const knownNames = ["elon musk", "steve jobs", "bill gates", "mark zuckerberg"];
-  if (knownNames.some((n) => v.includes(n))) return true;
-  const pattern = /\b[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,}(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,})+\b/g;
-  return (visual.match(pattern) || []).length > 0;
 }
 
 function PromptBlock({

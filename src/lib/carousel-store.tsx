@@ -134,7 +134,9 @@ async function generateAndCompose(
         sl.fmt,
         titleStyle,
       );
-    } catch { /* usa DEFAULT_LAYOUT */ }
+    } catch {
+      /* usa DEFAULT_LAYOUT */
+    }
   }
 
   const blob = await composeSlide(imgSrc, sl, faceB64, aiLayout, isFirstOrLast);
@@ -166,10 +168,18 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const [slideSteps, setSlideSteps] = useState<Record<number, string[]>>({});
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [facePresets, setFacePresets] = useState<FacePreset[]>(() => {
-    try { return JSON.parse(localStorage.getItem("facePresets") || "[]"); } catch { return []; }
+    try {
+      return JSON.parse(localStorage.getItem("facePresets") || "[]");
+    } catch {
+      return [];
+    }
   });
   const [layoutPresets, setLayoutPresets] = useState<LayoutPreset[]>(() => {
-    try { return JSON.parse(localStorage.getItem("layoutPresets") || "[]"); } catch { return []; }
+    try {
+      return JSON.parse(localStorage.getItem("layoutPresets") || "[]");
+    } catch {
+      return [];
+    }
   });
 
   const faceB64Ref = useRef("");
@@ -206,15 +216,18 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ── Presets ────────────────────────────────────────────────
-  const saveFacePreset = useCallback((name: string) => {
-    if (!faceDataUrl || !faceB64Ref.current) return;
-    const preset: FacePreset = { id: Date.now().toString(), name, dataUrl: faceDataUrl, b64: faceB64Ref.current };
-    setFacePresets((prev) => {
-      const next = [...prev, preset];
-      localStorage.setItem("facePresets", JSON.stringify(next));
-      return next;
-    });
-  }, [faceDataUrl]);
+  const saveFacePreset = useCallback(
+    (name: string) => {
+      if (!faceDataUrl || !faceB64Ref.current) return;
+      const preset: FacePreset = { id: Date.now().toString(), name, dataUrl: faceDataUrl, b64: faceB64Ref.current };
+      setFacePresets((prev) => {
+        const next = [...prev, preset];
+        localStorage.setItem("facePresets", JSON.stringify(next));
+        return next;
+      });
+    },
+    [faceDataUrl],
+  );
 
   const deleteFacePreset = useCallback((id: string) => {
     setFacePresets((prev) => {
@@ -231,15 +244,18 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     setFaceName(preset.name);
   }, []);
 
-  const saveLayoutPreset = useCallback((name: string) => {
-    if (!layoutRefDataUrl) return;
-    const preset: LayoutPreset = { id: Date.now().toString(), name, dataUrl: layoutRefDataUrl };
-    setLayoutPresets((prev) => {
-      const next = [...prev, preset];
-      localStorage.setItem("layoutPresets", JSON.stringify(next));
-      return next;
-    });
-  }, [layoutRefDataUrl]);
+  const saveLayoutPreset = useCallback(
+    (name: string) => {
+      if (!layoutRefDataUrl) return;
+      const preset: LayoutPreset = { id: Date.now().toString(), name, dataUrl: layoutRefDataUrl };
+      setLayoutPresets((prev) => {
+        const next = [...prev, preset];
+        localStorage.setItem("layoutPresets", JSON.stringify(next));
+        return next;
+      });
+    },
+    [layoutRefDataUrl],
+  );
 
   const deleteLayoutPreset = useCallback((id: string) => {
     setLayoutPresets((prev) => {
@@ -307,8 +323,11 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     const processedSlides: ProcessedSlide[] = parsed.map((s) => {
       // Face ref: only when there's a generic person AND no proper name detected
       const hasPerson = visualHasPerson(s.visual ?? "");
-      const hasNamedPerson = visualMentionsNamedPerson(s.visual ?? "");
-      const useFaceRef = hasFaceRef && hasPerson && !hasNamedPerson;
+      const namedPersonDetected = visualMentionsNamedPerson(s.visual ?? ""); // string | false
+      const useFaceRef = hasFaceRef && hasPerson && !namedPersonDetected;
+      // Guarda a palavra que causou omissão (ex: "elon musk", "João Silva")
+      const faceRefOmitReason: string | undefined =
+        !useFaceRef && !!namedPersonDetected ? namedPersonDetected : undefined;
 
       const layoutPos: LayoutPosition = "bottom-left";
       return {
@@ -324,6 +343,7 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
         },
         layoutPosition: layoutPos,
         useFaceRef,
+        faceRefOmitReason,
         fmt,
         style,
         light,
