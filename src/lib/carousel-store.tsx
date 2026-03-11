@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import type { ProcessedSlide, StyleKey, LightKey, FormatKey, ResKey, LayoutPosition } from "./parser";
 import { parseSlides } from "./parser";
-import { buildPrompt, buildLayout, visualHasPerson, detectTitleStyle } from "./prompts";
+import { buildPrompt, buildLayout, visualHasPerson, visualMentionsNamedPerson, detectTitleStyle } from "./prompts";
 import type { TitleStyle } from "./prompts";
 import { analyzeLayout, composeSlide, visualHasTitleInImage } from "./compositor";
 import type { AILayout } from "./compositor";
@@ -88,25 +88,6 @@ export function useCarousel() {
   return ctx;
 }
 
-// ─── PERSON DETECTION (named person heuristic) ────────────────
-const visualMentionsNamedPerson = (visual: string): boolean => {
-  const properNamePattern = /\b[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+)+\b/g;
-  const matches = visual.match(properNamePattern) || [];
-  const commonPhrases = [
-    "call to action",
-    "no slide",
-    "na cena",
-    "do slide",
-    "em pé",
-    "de frente",
-    "ao fundo",
-    "na mesa",
-    "com fundo",
-    "olhando para",
-  ];
-  return matches.some((m) => !commonPhrases.some((cp) => m.toLowerCase().includes(cp)));
-};
-
 // ─── HELPER: reduz imagem para base64 pequena p/ análise ──────
 async function shrinkToBase64(imgSrc: string, w: number, h: number): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -132,10 +113,8 @@ async function generateAndCompose(
   isFirstOrLast: boolean,
   titleStyle: TitleStyle,
 ): Promise<{ blob: Blob; url: string }> {
-  // 1. Gera imagem
   const imgSrc = await callGemini(sl, varIdx, faceB64);
 
-  // 2. Analisa layout com Haiku (detecta focusZone → textZone + gradient)
   let aiLayout: AILayout | undefined;
   if (imgSrc) {
     try {
@@ -149,18 +128,15 @@ async function generateAndCompose(
       const titleInImg = visualHasTitleInImage(sl.visual ?? "");
       aiLayout = await analyzeLayout(
         snap,
-        titleInImg ? "" : sl.titulo, // se título está na imagem, não passa pro Haiku
+        titleInImg ? "" : sl.titulo,
         sl.subtitulo ?? "",
         !!sl.cta,
         sl.fmt,
         titleStyle,
       );
-    } catch {
-      /* usa DEFAULT_LAYOUT */
-    }
+    } catch { /* usa DEFAULT_LAYOUT */ }
   }
 
-  // 3. Compõe slide com layout IA
   const blob = await composeSlide(imgSrc, sl, faceB64, aiLayout, isFirstOrLast);
   const url = URL.createObjectURL(blob);
   return { blob, url };
@@ -190,24 +166,15 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   const [slideSteps, setSlideSteps] = useState<Record<number, string[]>>({});
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [facePresets, setFacePresets] = useState<FacePreset[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("facePresets") || "[]");
-    } catch {
-      return [];
-    }
+    try { return JSON.parse(localStorage.getItem("facePresets") || "[]"); } catch { return []; }
   });
   const [layoutPresets, setLayoutPresets] = useState<LayoutPreset[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("layoutPresets") || "[]");
-    } catch {
-      return [];
-    }
+    try { return JSON.parse(localStorage.getItem("layoutPresets") || "[]"); } catch { return []; }
   });
 
   const faceB64Ref = useRef("");
   const stopRef = useRef(false);
 
-  // ── Carrega histórico do Supabase ──────────────────────────
   useEffect(() => {
     fetch("/api/history")
       .then((r) => (r.ok ? r.json() : []))
@@ -239,18 +206,15 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ── Presets ────────────────────────────────────────────────
-  const saveFacePreset = useCallback(
-    (name: string) => {
-      if (!faceDataUrl || !faceB64Ref.current) return;
-      const preset: FacePreset = { id: Date.now().toString(), name, dataUrl: faceDataUrl, b64: faceB64Ref.current };
-      setFacePresets((prev) => {
-        const next = [...prev, preset];
-        localStorage.setItem("facePresets", JSON.stringify(next));
-        return next;
-      });
-    },
-    [faceDataUrl],
-  );
+  const saveFacePreset = useCallback((name: string) => {
+    if (!faceDataUrl || !faceB64Ref.current) return;
+    const preset: FacePreset = { id: Date.now().toString(), name, dataUrl: faceDataUrl, b64: faceB64Ref.current };
+    setFacePresets((prev) => {
+      const next = [...prev, preset];
+      localStorage.setItem("facePresets", JSON.stringify(next));
+      return next;
+    });
+  }, [faceDataUrl]);
 
   const deleteFacePreset = useCallback((id: string) => {
     setFacePresets((prev) => {
@@ -267,18 +231,15 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     setFaceName(preset.name);
   }, []);
 
-  const saveLayoutPreset = useCallback(
-    (name: string) => {
-      if (!layoutRefDataUrl) return;
-      const preset: LayoutPreset = { id: Date.now().toString(), name, dataUrl: layoutRefDataUrl };
-      setLayoutPresets((prev) => {
-        const next = [...prev, preset];
-        localStorage.setItem("layoutPresets", JSON.stringify(next));
-        return next;
-      });
-    },
-    [layoutRefDataUrl],
-  );
+  const saveLayoutPreset = useCallback((name: string) => {
+    if (!layoutRefDataUrl) return;
+    const preset: LayoutPreset = { id: Date.now().toString(), name, dataUrl: layoutRefDataUrl };
+    setLayoutPresets((prev) => {
+      const next = [...prev, preset];
+      localStorage.setItem("layoutPresets", JSON.stringify(next));
+      return next;
+    });
+  }, [layoutRefDataUrl]);
 
   const deleteLayoutPreset = useCallback((id: string) => {
     setLayoutPresets((prev) => {
@@ -343,10 +304,12 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     const hasFaceRef = !!faceB64Ref.current;
     const totalSlides = parsed.length;
 
-    const processedSlides: ProcessedSlide[] = parsed.map((s, i) => {
-      const isFirstSlide = i === 0;
-      const useFaceRef =
-        hasFaceRef && visualHasPerson(s.visual ?? "") && (isFirstSlide || !visualMentionsNamedPerson(s.visual ?? ""));
+    const processedSlides: ProcessedSlide[] = parsed.map((s) => {
+      // Face ref: only when there's a generic person AND no proper name detected
+      const hasPerson = visualHasPerson(s.visual ?? "");
+      const hasNamedPerson = visualMentionsNamedPerson(s.visual ?? "");
+      const useFaceRef = hasFaceRef && hasPerson && !hasNamedPerson;
+
       const layoutPos: LayoutPosition = "bottom-left";
       return {
         ...s,
@@ -384,7 +347,6 @@ export function CarouselProvider({ children }: { children: React.ReactNode }) {
     let firstThumbUrl: string | undefined;
 
     for (let i = 0; i < processedSlides.length; i++) {
-      // ── STOP check ──
       if (stopRef.current) {
         setSlideStatus(i, "idle");
         break;

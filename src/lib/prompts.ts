@@ -34,35 +34,11 @@ export const VAR_HINTS = [
 
 // ─── PERSON DETECTION ─────────────────────────────────────────
 const PERSON_KEYWORDS = [
-  "pessoa",
-  "homem",
-  "mulher",
-  "menino",
-  "menina",
-  "criança",
-  "executivo",
-  "empresário",
-  "empresária",
-  "líder",
-  "atleta",
-  "médico",
-  "profissional",
-  "founder",
-  "ceo",
-  "palestrante",
-  "especialista",
-  "autor",
-  "coach",
-  "ele",
-  "ela",
-  "person",
-  "man",
-  "woman",
-  "boy",
-  "girl",
-  "human",
-  "speaker",
-  "expert",
+  "pessoa", "homem", "mulher", "menino", "menina", "criança",
+  "executivo", "empresário", "empresária", "líder", "atleta",
+  "médico", "profissional", "founder", "ceo", "palestrante",
+  "especialista", "autor", "coach", "ele", "ela",
+  "person", "man", "woman", "boy", "girl", "human", "speaker", "expert",
 ];
 
 export function visualHasPerson(visual: string): boolean {
@@ -70,48 +46,98 @@ export function visualHasPerson(visual: string): boolean {
   return PERSON_KEYWORDS.some((kw) => v.includes(kw));
 }
 
+// ─── NAMED PERSON / CHARACTER DETECTION ───────────────────────
+// Detects proper names, celebrities, characters in the VISUAL field.
+// When detected, FACE_REFERENCE should be omitted so the AI generates
+// the actual person/character instead of using the user's face.
+const KNOWN_NAMES = [
+  // Tech
+  "elon musk", "steve jobs", "bill gates", "mark zuckerberg", "jeff bezos",
+  "tim cook", "satya nadella", "larry page", "sergey brin", "jack dorsey",
+  // Entertainment
+  "beyoncé", "beyonce", "rihanna", "drake", "taylor swift", "kanye west",
+  "lady gaga", "madonna", "michael jackson", "elvis presley", "freddie mercury",
+  "bob marley", "eminem", "jay-z", "nicki minaj", "ariana grande",
+  // Actors
+  "brad pitt", "angelina jolie", "leonardo dicaprio", "robert downey jr",
+  "tom cruise", "will smith", "johnny depp", "scarlett johansson",
+  "morgan freeman", "denzel washington", "keanu reeves", "ryan reynolds",
+  "dwayne johnson", "the rock",
+  // Sports
+  "cristiano ronaldo", "messi", "lionel messi", "neymar", "lebron james",
+  "michael jordan", "serena williams", "usain bolt", "pelé", "pele",
+  "ronaldinho", "kobe bryant", "muhammad ali",
+  // Historical
+  "einstein", "albert einstein", "nikola tesla", "napoleon", "cleopatra",
+  "gandhi", "martin luther king", "nelson mandela", "abraham lincoln",
+  // Fictional characters
+  "batman", "superman", "spider-man", "spiderman", "homem-aranha",
+  "iron man", "homem de ferro", "thor", "hulk", "wolverine",
+  "darth vader", "luke skywalker", "harry potter", "gandalf",
+  "joker", "coringa", "thanos", "deadpool", "capitão américa",
+  "captain america", "wonder woman", "mulher maravilha",
+  // Brazilian
+  "anitta", "neymar jr", "xuxa", "silvio santos", "luciano huck",
+  "gisele bündchen", "gisele bundchen", "ayrton senna", "lula",
+  "bolsonaro", "pablo marçal", "pablo marcal", "flávio augusto",
+  "flavio augusto", "thiago nigro", "primo rico", "joel jota",
+  "caio carneiro", "ícaro de carvalho", "icaro de carvalho",
+  "whindersson nunes", "casimiro", "felipe neto",
+];
+
+const PROPER_NAME_REGEX = /\b[A-ZÁÉÍÓÚÂÊÔÃÕÇÑ][a-záéíóúâêôãõçñ]{2,}(?:\s+(?:de|do|da|dos|das|e|van|von|del|la|el|al|bin|ibn)?\s*[A-ZÁÉÍÓÚÂÊÔÃÕÇÑ][a-záéíóúâêôãõçñ]{2,})+\b/g;
+
+const COMMON_NON_NAMES = [
+  "call to action", "no slide", "na cena", "do slide", "em pé",
+  "de frente", "ao fundo", "na mesa", "com fundo", "olhando para",
+  "close up", "meio corpo", "corpo inteiro", "plano médio",
+  "à esquerda", "à direita", "ao centro", "no centro",
+  "first person", "full body", "half body", "face reference",
+];
+
+export function visualMentionsNamedPerson(visual: string): boolean {
+  const v = (visual ?? "").toLowerCase();
+
+  // Check known names list first
+  if (KNOWN_NAMES.some((name) => v.includes(name))) return true;
+
+  // Check proper name patterns (multi-word capitalized)
+  const matches = visual.match(PROPER_NAME_REGEX) || [];
+  return matches.some(
+    (m) => !COMMON_NON_NAMES.some((cp) => m.toLowerCase().includes(cp))
+  );
+}
+
 // ─── SKIN & REALISM BOOSTER ───────────────────────────────────
 const SKIN_REALISM =
   "ultra-detailed skin texture with visible pores, natural skin imperfections, subsurface scattering on skin creating translucent warmth under strong light, sharp catchlights in eyes with natural iris detail, individual hair strands visible, natural micro-expressions";
 
 // ─── TITLE STYLE DETECTION ────────────────────────────────────
-// Detecta no campo visual/design referência a estética de título de série/filme
-// Retorna um identificador de estilo para o compositor renderizar tipografia temática
-
 export type TitleStyle =
   | "default"
-  | "everybody-hates-chris" // yellow-black sitcom block, bold stroke 2000s
-  | "stranger-things" // red neon glow, 80s ITC Benguiat horror
-  | "breaking-bad" // yellow periodic element chemistry
-  | "peaky-blinders" // gold serif on dark, ornate
-  | "money-heist" // red stencil military block
-  | "squid-game" // pink/teal geometric sans
-  | "wednesday" // gothic pale serif
-  | "succession" // minimal white uppercase serif
-  | "the-office" // plain white mockumentary doc
-  | "ozark" // blue-green dark water tones
-  | "narcos" // yellow gritty distressed
-  | "euphoria" // glitter holographic pastel
-  | "game-of-thrones" // medieval gold ornate
-  | "vikings" // runic carved stone
-  | "taxi-driver" // grungy hand-lettered yellow
-  | "pulp-fiction" // retro yellow pop-art
-  | "blade-runner" // cyan neon rain
-  | "star-wars" // gold chrome space
-  | "matrix" // green digital rain
-  | "fight-club"; // anarchist cut-out letters
+  | "everybody-hates-chris"
+  | "stranger-things"
+  | "breaking-bad"
+  | "peaky-blinders"
+  | "money-heist"
+  | "squid-game"
+  | "wednesday"
+  | "succession"
+  | "the-office"
+  | "ozark"
+  | "narcos"
+  | "euphoria"
+  | "game-of-thrones"
+  | "vikings"
+  | "taxi-driver"
+  | "pulp-fiction"
+  | "blade-runner"
+  | "star-wars"
+  | "matrix"
+  | "fight-club";
 
 const TITLE_STYLE_MAP: Array<{ keywords: string[]; style: TitleStyle }> = [
-  {
-    keywords: [
-      "todo mundo odeia",
-      "everybody hates",
-      "everybody hates chris",
-      "todo mundo odeia o chris",
-      "seriado chris",
-    ],
-    style: "everybody-hates-chris",
-  },
+  { keywords: ["todo mundo odeia", "everybody hates", "everybody hates chris", "todo mundo odeia o chris", "seriado chris"], style: "everybody-hates-chris" },
   { keywords: ["stranger things", "upside down", "demogorgon"], style: "stranger-things" },
   { keywords: ["breaking bad", "heisenberg", "walter white"], style: "breaking-bad" },
   { keywords: ["peaky blinders", "peaky", "shelby"], style: "peaky-blinders" },
@@ -179,12 +205,12 @@ export function buildPrompt(
     sl.design || "",
     hasPerson ? SKIN_REALISM : "",
     "",
-    "CINEMATIC COMPOSITION:",
-    "Shoot as a great cinematic photograph with natural atmospheric depth and distinct luminosity zones.",
-    "Create strong tonal contrast: bright foreground subject, rich mid-tones, deep atmospheric shadows.",
-    "CRITICAL: The image must have at least one large naturally dark or soft-focus area — subject positioned off-center with strong directional lighting creating organic negative space.",
-    "Dark shadow zones must carry the scene's ambient color temperature — never pure black voids.",
-    "Do NOT artificially reserve text zones. Just make an exceptional cinematic image with natural depth.",
+    "COMPOSITION & LAYOUT:",
+    "The image MUST have strong compositional hierarchy with dramatic negative space.",
+    "Position the main subject off-center following the rule of thirds.",
+    "Leave at least 30-40% of the image as clean dark/atmospheric area for text overlay (do NOT add text — just leave clean space).",
+    "Create natural depth separation: sharp foreground subject, soft bokeh mid-ground, atmospheric background.",
+    "CRITICAL: Ensure at least one large area of the image has low visual complexity (soft gradients, bokeh, shadow) for typography placement.",
     "",
     "QUALITY & ATMOSPHERE:",
     "professional commercial photography, dramatic atmospheric depth, cinematic bokeh, subject tack-sharp, rich textured shadows with ambient color contamination at 8-15% intensity, volumetric light spill, colored shadows NEVER pure black, Hasselblad medium format quality",
@@ -197,7 +223,7 @@ export function buildPrompt(
   return { pos: parts, neg: NEG };
 }
 
-// ─── BUILD LAYOUT (accent only — position decided by AI) ──────
+// ─── BUILD LAYOUT (accent only) ──────────────────────────────
 export function buildLayout(light: LightKey): { accent: string } {
   const ACC: Record<LightKey, string> = {
     dramatic: "#00b4ff",
