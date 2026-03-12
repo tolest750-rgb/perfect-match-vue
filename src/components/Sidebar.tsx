@@ -6,7 +6,7 @@ import { LayoutRefUpload } from "./LayoutRefUpload";
 import { ChipGroup } from "./ChipGroup";
 import type { StyleKey, LightKey, FormatKey, ResKey } from "@/lib/parser";
 
-// ─── API CONFIG (sem arquivo externo) ────────────────────────
+// ─── API CONFIG (legacy exports kept for compatibility) ──────
 export interface GeminiKeyEntry {
   id: string;
   name: string;
@@ -17,37 +17,10 @@ export interface GeminiKeyEntry {
 export interface ApiConfig {
   geminiKeys: GeminiKeyEntry[];
 }
-const API_STORAGE_KEY = "carousel_api_config";
-export const DEFAULT_API_CONFIG: ApiConfig = { geminiKeys: [] };
-
-export function loadApiConfig(): ApiConfig {
-  try {
-    const raw = localStorage.getItem(API_STORAGE_KEY);
-    if (!raw) return DEFAULT_API_CONFIG;
-    return { ...DEFAULT_API_CONFIG, ...JSON.parse(raw) };
-  } catch {
-    return DEFAULT_API_CONFIG;
-  }
-}
-export function saveApiConfig(cfg: ApiConfig) {
-  localStorage.setItem(API_STORAGE_KEY, JSON.stringify(cfg));
-}
-export function markKeyFailed(cfg: ApiConfig, keyId: string): ApiConfig {
-  const next = {
-    ...cfg,
-    geminiKeys: cfg.geminiKeys.map((k) => (k.id === keyId ? { ...k, failedAt: Date.now() } : k)),
-  };
-  saveApiConfig(next);
-  return next;
-}
-export function getOrderedGeminiKeys(cfg: ApiConfig): GeminiKeyEntry[] {
-  return [...cfg.geminiKeys].sort((a, b) => {
-    if (!a.failedAt && !b.failedAt) return a.addedAt - b.addedAt;
-    if (!a.failedAt) return -1;
-    if (!b.failedAt) return 1;
-    return a.failedAt - b.failedAt;
-  });
-}
+export function loadApiConfig(): ApiConfig { return { geminiKeys: [] }; }
+export function saveApiConfig(_cfg: ApiConfig) {}
+export function markKeyFailed(cfg: ApiConfig, _keyId: string): ApiConfig { return cfg; }
+export function getOrderedGeminiKeys(_cfg: ApiConfig): GeminiKeyEntry[] { return []; }
 
 // ─── PARSER VISUAL ────────────────────────────────────────────
 interface SlideBlock {
@@ -128,51 +101,6 @@ export function Sidebar() {
   const [showLayoutPresets, setShowLayoutPresets] = useState(true);
   const [textMode, setTextMode] = useState<"edit" | "preview">("edit");
   const [copied, setCopied] = useState(false);
-
-  // ── API Keys state ──────────────────────────────────────────
-  const [apiConfig, setApiConfig] = useState<ApiConfig>(() => loadApiConfig());
-  const [apiExpanded, setApiExpanded] = useState(false);
-  const [newKeyName, setNewKeyName] = useState("");
-  const [newKeyValue, setNewKeyValue] = useState("");
-  const [showKeyMap, setShowKeyMap] = useState<Record<string, boolean>>({});
-  const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
-
-  const updateApiConfig = (partial: Partial<ApiConfig>) => {
-    const next = { ...apiConfig, ...partial };
-    setApiConfig(next);
-    saveApiConfig(next);
-  };
-
-  const addGeminiKey = () => {
-    const name = newKeyName.trim();
-    const key = newKeyValue.trim();
-    if (!name || !key) return;
-    const entry: GeminiKeyEntry = { id: `gk_${Date.now()}`, name, key, addedAt: Date.now() };
-    updateApiConfig({ geminiKeys: [...apiConfig.geminiKeys, entry] });
-    setNewKeyName("");
-    setNewKeyValue("");
-  };
-
-  const removeGeminiKey = (id: string) => {
-    updateApiConfig({ geminiKeys: apiConfig.geminiKeys.filter((k) => k.id !== id) });
-  };
-
-  const clearKeyFailed = (id: string) => {
-    updateApiConfig({
-      geminiKeys: apiConfig.geminiKeys.map((k) => (k.id === id ? { ...k, failedAt: undefined } : k)),
-    });
-  };
-
-  const copyGeminiKey = (id: string, key: string) => {
-    navigator.clipboard.writeText(key);
-    setCopiedKeyId(id);
-    setTimeout(() => setCopiedKeyId(null), 1500);
-  };
-
-  const maskKey = (key: string) => key.slice(0, 6) + "•".repeat(Math.min(18, key.length - 10)) + key.slice(-4);
-
-  const orderedKeys = getOrderedGeminiKeys(apiConfig);
-  const failedCount = apiConfig.geminiKeys.filter((k) => k.failedAt).length;
 
   // ── Text helpers ────────────────────────────────────────────
   const canGenerate = rawText.trim().length > 0 && !isGenerating;
@@ -346,174 +274,6 @@ export function Sidebar() {
                 </>
               )}
             </div>
-          </div>
-
-          {/* ── API Keys ────────────────────────────────────── */}
-          <div className="border-b border-border2">
-            <button
-              onClick={() => setApiExpanded((v) => !v)}
-              className="w-full flex items-center gap-2 px-4 py-3 hover:bg-card/40 transition-colors group"
-            >
-              <span className="text-primary text-[10px]" style={{ textShadow: "0 0 6px hsl(var(--primary))" }}>
-                ◈
-              </span>
-              <span className="font-mono text-[9px] tracking-[2.5px] uppercase text-muted-foreground group-hover:text-foreground transition-colors flex-1 text-left">
-                API_KEYS
-              </span>
-              <div className="flex items-center gap-1">
-                <span className="font-mono text-[7px] px-1.5 py-0.5 rounded-sm border bg-card-2 text-muted-foreground border-border2">
-                  LVB
-                </span>
-                {orderedKeys.length > 0 && (
-                  <>
-                    <span className="text-muted-foreground text-[8px]">→</span>
-                    {orderedKeys.slice(0, 2).map((k) => (
-                      <span
-                        key={k.id}
-                        className={`font-mono text-[7px] px-1.5 py-0.5 rounded-sm border ${k.failedAt ? "bg-destructive/10 text-destructive/70 border-destructive/20" : "bg-primary/10 text-primary border-primary/20"}`}
-                      >
-                        {k.name.slice(0, 6)}
-                      </span>
-                    ))}
-                    {apiConfig.geminiKeys.length > 2 && (
-                      <span className="font-mono text-[7px] text-muted-foreground">
-                        +{apiConfig.geminiKeys.length - 2}
-                      </span>
-                    )}
-                  </>
-                )}
-              </div>
-              <span
-                className={`text-[10px] transition-transform duration-200 text-muted-foreground ml-1 ${apiExpanded ? "rotate-180" : ""}`}
-              >
-                ▾
-              </span>
-            </button>
-
-            {apiExpanded && (
-              <div className="px-4 pb-4 flex flex-col gap-3">
-                {/* Lógica de fallback info */}
-                <div className="bg-card border border-border2 rounded-sm px-3 py-2 flex flex-col gap-1">
-                  <div className="font-mono text-[8px] text-primary tracking-[1px]">◈ FALLBACK AUTOMÁTICO</div>
-                  <div className="font-mono text-[8px] text-muted-foreground leading-relaxed">
-                    <span className="text-foreground">1.</span> Lovable Gateway (prioritário)
-                    <br />
-                    <span className="text-foreground">2.</span> Gemini Keys em sequência
-                    <br />
-                    <span className="text-[7px] opacity-70">
-                      Se uma falhar por cota, tenta a próxima automaticamente.
-                    </span>
-                  </div>
-                </div>
-
-                {/* Lista de keys */}
-                {orderedKeys.length > 0 && (
-                  <div className="flex flex-col gap-1">
-                    <div className="font-mono text-[8px] tracking-[1px] text-muted-foreground flex items-center gap-2">
-                      GEMINI FALLBACKS
-                      {failedCount > 0 && (
-                        <span className="text-destructive/70 text-[7px]">({failedCount} com falha)</span>
-                      )}
-                    </div>
-                    {orderedKeys.map((k, i) => (
-                      <div
-                        key={k.id}
-                        className={`flex items-center gap-2 rounded-sm px-2 py-1.5 border group/key ${k.failedAt ? "bg-destructive/[0.04] border-destructive/20" : "bg-card border-border2"}`}
-                      >
-                        <span
-                          className={`font-mono text-[8px] w-4 shrink-0 ${k.failedAt ? "text-destructive/50" : "text-primary"}`}
-                        >
-                          #{i + 1}
-                        </span>
-                        <div className="flex flex-col flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono text-[9px] text-foreground truncate">{k.name}</span>
-                            {k.failedAt && (
-                              <span className="font-mono text-[6px] text-destructive/70 border border-destructive/20 px-1 rounded-sm shrink-0">
-                                FALHOU
-                              </span>
-                            )}
-                          </div>
-                          <span className="font-mono text-[7px] text-muted-foreground truncate">
-                            {showKeyMap[k.id] ? k.key : maskKey(k.key)}
-                          </span>
-                        </div>
-                        <div className="flex gap-0.5 opacity-0 group-hover/key:opacity-100 transition-opacity">
-                          {k.failedAt && (
-                            <button
-                              onClick={() => clearKeyFailed(k.id)}
-                              className="font-mono text-[8px] text-yellow-500 hover:text-foreground transition-colors px-1"
-                              title="Reativar"
-                            >
-                              ↺
-                            </button>
-                          )}
-                          <button
-                            onClick={() => setShowKeyMap((p) => ({ ...p, [k.id]: !p[k.id] }))}
-                            className="font-mono text-[8px] text-muted-foreground hover:text-foreground transition-colors px-1"
-                          >
-                            {showKeyMap[k.id] ? "◉" : "◎"}
-                          </button>
-                          <button
-                            onClick={() => copyGeminiKey(k.id, k.key)}
-                            className="font-mono text-[8px] text-muted-foreground hover:text-primary transition-colors px-1"
-                          >
-                            {copiedKeyId === k.id ? "✓" : "⎘"}
-                          </button>
-                          <button
-                            onClick={() => removeGeminiKey(k.id)}
-                            className="font-mono text-[8px] text-muted-foreground hover:text-destructive transition-colors px-1"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Adicionar nova key */}
-                <div className="flex flex-col gap-1.5">
-                  <div className="font-mono text-[8px] tracking-[1px] text-muted-foreground">
-                    + ADICIONAR GEMINI KEY
-                  </div>
-                  <input
-                    value={newKeyName}
-                    onChange={(e) => setNewKeyName(e.target.value)}
-                    placeholder="Nome (ex: Pessoal, Conta 2…)"
-                    className="w-full bg-card border border-border2 rounded-sm font-mono text-[10px] px-2 py-1.5 text-foreground outline-none focus:border-primary placeholder:text-muted-foreground transition-colors"
-                  />
-                  <div className="flex gap-1.5">
-                    <input
-                      value={newKeyValue}
-                      onChange={(e) => setNewKeyValue(e.target.value)}
-                      placeholder="AIza…"
-                      type="password"
-                      className="flex-1 bg-card border border-border2 rounded-sm font-mono text-[10px] px-2 py-1.5 text-foreground outline-none focus:border-primary placeholder:text-muted-foreground transition-colors"
-                      onKeyDown={(e) => e.key === "Enter" && addGeminiKey()}
-                    />
-                    <button
-                      onClick={addGeminiKey}
-                      disabled={!newKeyName.trim() || !newKeyValue.trim()}
-                      className="bg-transparent border border-primary/50 rounded-sm text-primary font-mono text-[8px] tracking-[1px] px-2.5 py-1 hover:bg-primary/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
-                    >
-                      + ADD
-                    </button>
-                  </div>
-                  <div className="font-mono text-[7px] text-muted-foreground leading-relaxed">
-                    Key gratuita em{" "}
-                    <a
-                      href="https://aistudio.google.com/apikey"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      aistudio.google.com/apikey
-                    </a>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* ── Carousel Data ───────────────────────────────── */}
