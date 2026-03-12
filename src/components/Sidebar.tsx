@@ -102,8 +102,6 @@ export function Sidebar() {
   const [textMode, setTextMode] = useState<"edit" | "preview">("edit");
   const [copied, setCopied] = useState(false);
 
-  const [copied, setCopied] = useState(false);
-
   // ── Text helpers ────────────────────────────────────────────
   const canGenerate = rawText.trim().length > 0 && !isGenerating;
   const slideBlocks = useMemo(() => parseRawToBlocks(rawText), [rawText]);
