@@ -102,50 +102,7 @@ export function Sidebar() {
   const [textMode, setTextMode] = useState<"edit" | "preview">("edit");
   const [copied, setCopied] = useState(false);
 
-  // ── API Keys state ──────────────────────────────────────────
-  const [apiConfig, setApiConfig] = useState<ApiConfig>(() => loadApiConfig());
-  const [apiExpanded, setApiExpanded] = useState(false);
-  const [newKeyName, setNewKeyName] = useState("");
-  const [newKeyValue, setNewKeyValue] = useState("");
-  const [showKeyMap, setShowKeyMap] = useState<Record<string, boolean>>({});
-  const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
-
-  const updateApiConfig = (partial: Partial<ApiConfig>) => {
-    const next = { ...apiConfig, ...partial };
-    setApiConfig(next);
-    saveApiConfig(next);
-  };
-
-  const addGeminiKey = () => {
-    const name = newKeyName.trim();
-    const key = newKeyValue.trim();
-    if (!name || !key) return;
-    const entry: GeminiKeyEntry = { id: `gk_${Date.now()}`, name, key, addedAt: Date.now() };
-    updateApiConfig({ geminiKeys: [...apiConfig.geminiKeys, entry] });
-    setNewKeyName("");
-    setNewKeyValue("");
-  };
-
-  const removeGeminiKey = (id: string) => {
-    updateApiConfig({ geminiKeys: apiConfig.geminiKeys.filter((k) => k.id !== id) });
-  };
-
-  const clearKeyFailed = (id: string) => {
-    updateApiConfig({
-      geminiKeys: apiConfig.geminiKeys.map((k) => (k.id === id ? { ...k, failedAt: undefined } : k)),
-    });
-  };
-
-  const copyGeminiKey = (id: string, key: string) => {
-    navigator.clipboard.writeText(key);
-    setCopiedKeyId(id);
-    setTimeout(() => setCopiedKeyId(null), 1500);
-  };
-
-  const maskKey = (key: string) => key.slice(0, 6) + "•".repeat(Math.min(18, key.length - 10)) + key.slice(-4);
-
-  const orderedKeys = getOrderedGeminiKeys(apiConfig);
-  const failedCount = apiConfig.geminiKeys.filter((k) => k.failedAt).length;
+  const [copied, setCopied] = useState(false);
 
   // ── Text helpers ────────────────────────────────────────────
   const canGenerate = rawText.trim().length > 0 && !isGenerating;
