@@ -6,7 +6,7 @@ import { LayoutRefUpload } from "./LayoutRefUpload";
 import { ChipGroup } from "./ChipGroup";
 import type { StyleKey, LightKey, FormatKey, ResKey } from "@/lib/parser";
 
-// ─── API CONFIG (sem arquivo externo) ────────────────────────
+// ─── API CONFIG (legacy exports kept for compatibility) ──────
 export interface GeminiKeyEntry {
   id: string;
   name: string;
@@ -17,37 +17,10 @@ export interface GeminiKeyEntry {
 export interface ApiConfig {
   geminiKeys: GeminiKeyEntry[];
 }
-const API_STORAGE_KEY = "carousel_api_config";
-export const DEFAULT_API_CONFIG: ApiConfig = { geminiKeys: [] };
-
-export function loadApiConfig(): ApiConfig {
-  try {
-    const raw = localStorage.getItem(API_STORAGE_KEY);
-    if (!raw) return DEFAULT_API_CONFIG;
-    return { ...DEFAULT_API_CONFIG, ...JSON.parse(raw) };
-  } catch {
-    return DEFAULT_API_CONFIG;
-  }
-}
-export function saveApiConfig(cfg: ApiConfig) {
-  localStorage.setItem(API_STORAGE_KEY, JSON.stringify(cfg));
-}
-export function markKeyFailed(cfg: ApiConfig, keyId: string): ApiConfig {
-  const next = {
-    ...cfg,
-    geminiKeys: cfg.geminiKeys.map((k) => (k.id === keyId ? { ...k, failedAt: Date.now() } : k)),
-  };
-  saveApiConfig(next);
-  return next;
-}
-export function getOrderedGeminiKeys(cfg: ApiConfig): GeminiKeyEntry[] {
-  return [...cfg.geminiKeys].sort((a, b) => {
-    if (!a.failedAt && !b.failedAt) return a.addedAt - b.addedAt;
-    if (!a.failedAt) return -1;
-    if (!b.failedAt) return 1;
-    return a.failedAt - b.failedAt;
-  });
-}
+export function loadApiConfig(): ApiConfig { return { geminiKeys: [] }; }
+export function saveApiConfig(_cfg: ApiConfig) {}
+export function markKeyFailed(cfg: ApiConfig, _keyId: string): ApiConfig { return cfg; }
+export function getOrderedGeminiKeys(_cfg: ApiConfig): GeminiKeyEntry[] { return []; }
 
 // ─── PARSER VISUAL ────────────────────────────────────────────
 interface SlideBlock {
