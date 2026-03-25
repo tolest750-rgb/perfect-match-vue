@@ -12,38 +12,38 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
 
     const { prompt, faceB64 } = await req.json();
 
     console.log(`[generate-image] face=${!!faceB64}`);
 
-    // Build message content
-    const content: any[] = [{ type: "text", text: prompt }];
+    // Build parts array for Gemini native format
+    const parts: any[] = [{ text: prompt }];
     if (faceB64) {
-      content.push({
-        type: "image_url",
-        image_url: { url: `data:image/jpeg;base64,${faceB64}` },
+      parts.push({
+        inlineData: { mimeType: "image/jpeg", data: faceB64 },
       });
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const model = "gemini-2.0-flash-exp-image-generation";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+
+    const response = await fetch(url, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content }],
-        modalities: ["image", "text"],
+        contents: [{ parts }],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"],
+        },
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error(`[generate-image] Gateway error ${response.status}:`, errText);
+      console.error(`[generate-image] Gemini error ${response.status}:`, errText);
 
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again shortly.", isQuotaError: true }), {
@@ -51,28 +51,30 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required. Add credits to your Lovable workspace.", isQuotaError: false }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
 
-      throw new Error(`AI Gateway error ${response.status}: ${errText.slice(0, 200)}`);
+      throw new Error(`Gemini API error ${response.status}: ${errText.slice(0, 300)}`);
     }
 
     const data = await response.json();
 
-    // Extract image from gateway response
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-    if (imageUrl) {
-      return new Response(JSON.stringify({ imageUrl }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Extract image from Gemini native response
+    const candidates = data.candidates;
+    if (candidates && candidates.length > 0) {
+      const parts2 = candidates[0].content?.parts || [];
+      for (const part of parts2) {
+        if (part.inlineData) {
+          const mime = part.inlineData.mimeType || "image/png";
+          const b64 = part.inlineData.data;
+          const imageUrl = `data:${mime};base64,${b64}`;
+          return new Response(JSON.stringify({ imageUrl }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
     }
 
-    throw new Error("No image in AI response. Response: " + JSON.stringify(data).slice(0, 300));
+    throw new Error("No image in Gemini response. Response: " + JSON.stringify(data).slice(0, 300));
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";
     console.error("[generate-image] Error:", msg);

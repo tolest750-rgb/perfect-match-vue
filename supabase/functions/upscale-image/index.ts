@@ -12,10 +12,8 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
 
     const { imageB64, scale } = await req.json();
     if (!imageB64) {
@@ -26,40 +24,34 @@ serve(async (req) => {
     }
 
     const targetScale = scale || 4;
+    console.log(`[upscale-image] Upscaling image at ${targetScale}x via Gemini direct`);
 
-    console.log(`[upscale-image] Upscaling image at ${targetScale}x via Gemini`);
+    const model = "gemini-2.0-flash-exp-image-generation";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
 
-    // Use Gemini image editing to upscale/enhance
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(url, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-3.1-flash-image-preview",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `Enhance this image to maximum quality. Sharpen details, improve clarity, fix any artifacts, enhance skin texture and facial details if present. Keep the exact same composition, colors, and content. Output the highest quality version possible.`,
-              },
-              {
-                type: "image_url",
-                image_url: { url: `data:image/png;base64,${imageB64}` },
-              },
-            ],
-          },
-        ],
-        modalities: ["image", "text"],
+        contents: [{
+          parts: [
+            {
+              text: "Enhance this image to maximum quality. Sharpen details, improve clarity, fix any artifacts, enhance skin texture and facial details if present. Keep the exact same composition, colors, and content. Output the highest quality version possible.",
+            },
+            {
+              inlineData: { mimeType: "image/png", data: imageB64 },
+            },
+          ],
+        }],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"],
+        },
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error(`[upscale-image] Gateway error ${response.status}:`, errText);
+      console.error(`[upscale-image] Gemini error ${response.status}:`, errText);
 
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again shortly." }), {
@@ -67,43 +59,32 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
 
-      return new Response(JSON.stringify({ error: `AI Gateway error: ${response.status}` }), {
+      return new Response(JSON.stringify({ error: `Gemini API error: ${response.status}` }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const rawText = await response.text();
-    let data: any;
-    try {
-      data = JSON.parse(rawText);
-    } catch {
-      console.error("[upscale-image] Truncated response, length:", rawText.length);
-      return new Response(JSON.stringify({ error: "Truncated AI response" }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const data = await response.json();
 
-    const images = data.choices?.[0]?.message?.images;
-    if (images && images.length > 0) {
-      const imageUrl = images[0].image_url?.url;
-      if (imageUrl) {
-        return new Response(JSON.stringify({ imageUrl }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    const candidates = data.candidates;
+    if (candidates && candidates.length > 0) {
+      const parts = candidates[0].content?.parts || [];
+      for (const part of parts) {
+        if (part.inlineData) {
+          const mime = part.inlineData.mimeType || "image/png";
+          const b64 = part.inlineData.data;
+          const imageUrl = `data:${mime};base64,${b64}`;
+          return new Response(JSON.stringify({ imageUrl }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
     }
 
-    // If no enhanced image, return original
+    // No enhanced image returned, send original back
     console.log("[upscale-image] No enhanced image returned, sending original back");
     return new Response(JSON.stringify({ imageUrl: `data:image/png;base64,${imageB64}` }), {
       status: 200,
