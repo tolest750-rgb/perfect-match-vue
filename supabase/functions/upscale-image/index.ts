@@ -26,7 +26,7 @@ serve(async (req) => {
     const targetScale = scale || 4;
     console.log(`[upscale-image] Upscaling image at ${targetScale}x via Gemini direct`);
 
-    const model = "gemini-2.0-flash-exp-image-generation";
+    const model = "gemini-2.5-flash-image";
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
 
     const response = await fetch(url, {
