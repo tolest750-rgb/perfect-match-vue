@@ -6,14 +6,16 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const FALLBACK = { focusZone: "center", gradientStart: 0.42, gradientMaxOpacity: 0.82 };
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
 
     const { imageBase64, titulo, subtitulo, hasCta, fmt } = await req.json();
 
@@ -30,26 +32,7 @@ gradientStart: where the gradient begins (0=edge, 1=center, use 0.30–0.65).
 
 Respond ONLY with valid JSON, no markdown.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              {
-                type: "image_url",
-                image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
-              },
-              {
-                type: "text",
-                text: `Analyze this ${fmt} image.
+    const userPrompt = `Analyze this ${fmt} image.
 Title to overlay: "${titulo}"
 Subtitle: "${subtitulo}"
 Has CTA button: ${hasCta}
@@ -59,39 +42,41 @@ Return ONLY this JSON:
   "focusZone": "<top-left|top-center|top-right|center-left|center|center-right|bottom-left|bottom-center|bottom-right>",
   "gradientStart": <0.30-0.65>,
   "gradientMaxOpacity": <0.55-0.88>
-}`,
-              },
-            ],
-          },
-        ],
+}`;
+
+    const model = "gemini-2.0-flash";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{
+          parts: [
+            { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
+            { text: userPrompt },
+          ],
+        }],
       }),
     });
 
     if (!response.ok) {
-      console.error("[analyze-layout] Gateway error:", response.status);
-      return new Response(JSON.stringify({ focusZone: "center", gradientStart: 0.42, gradientMaxOpacity: 0.82 }), {
+      console.error("[analyze-layout] Gemini error:", response.status);
+      return new Response(JSON.stringify(FALLBACK), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const rawText = await response.text();
-    let data: any;
-    try {
-      data = JSON.parse(rawText);
-    } catch {
-      return new Response(JSON.stringify({ focusZone: "center", gradientStart: 0.42, gradientMaxOpacity: 0.82 }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const content = data.choices?.[0]?.message?.content || "";
+    const data = await response.json();
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     const clean = content.replace(/```json|```/g, "").trim();
 
     let parsed: any;
     try {
       parsed = JSON.parse(clean);
     } catch {
-      parsed = { focusZone: "center", gradientStart: 0.42, gradientMaxOpacity: 0.82 };
+      parsed = FALLBACK;
     }
 
     return new Response(JSON.stringify(parsed), {
@@ -99,7 +84,7 @@ Return ONLY this JSON:
     });
   } catch (e) {
     console.error("[analyze-layout] Error:", e);
-    return new Response(JSON.stringify({ focusZone: "center", gradientStart: 0.42, gradientMaxOpacity: 0.82 }), {
+    return new Response(JSON.stringify(FALLBACK), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
